@@ -1,10 +1,20 @@
 import numpy as np
+# Convert face patterns from 2444x1718 RGB - to 152x107 8bit greyscale resolution
+#  
+# First you mast import all neutral faces from the Chicago Face Database to the folder
+# ../faces.
+#   
+#   mkdir -p faces labels
+#   
+#
+
 from PIL import Image
 
 import glob
 import re
 
-figures = glob.glob("faces/*.jpg")
+
+figures = glob.glob("../faces/*.jpg")
 w = 2444
 h = 1718
 ww = w//16
@@ -22,6 +32,6 @@ for k, fig in enumerate(figures):
         lab_re = re.match(r".*CFD-(\w+)-.*", fig)
         plabels.append(lab_re.group(1))
         print(plabels[k])
-np.savetxt("faces/figs", pfigs.astype(int), fmt='%4d' )
-np.savetxt("faces/labels", plabels, fmt='%s' )
+np.savetxt("figs", pfigs.astype(int), fmt='%4d' )
+np.savetxt("labels", plabels, fmt='%s' )
 
