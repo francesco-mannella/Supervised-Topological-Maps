@@ -52,8 +52,7 @@ class BarrColors:
         X, Y, Z = np.meshgrid(x, x, x) 
         Q = np.vstack([X.ravel(), Y.ravel(), Z.ravel()]).T[1:-2]
 
-        colors = Q[np.random.choice(len(Q), n)]/2
-        orientations = np.random.uniform(0, 2*np.pi, n)
+        self.orientations = np.random.uniform(0, 2*np.pi, n)
 
         fig = plt.figure(figsize=(1,1), dpi=10)
 
@@ -63,17 +62,20 @@ class BarrColors:
             ax = fig.add_subplot(111, aspect="equal")
             ax.set_xlim([-1.3, 1.3])
             ax.set_ylim([-1.3, 1.3])
-            c = colors[i]
-            a = orientations[i]
+            a = self.orientations[i]
             na = (a + np.pi)
             coords = np.array([
                 [np.cos(a), np.sin(a)],
                 [np.cos(na), np.sin(na)]])
 
-            ax.plot(*coords.T, lw=10, c=c)
+            ax.plot(*coords.T, lw=10, c='k')
             ax.set_axis_off()
             img = fig2img(fig)
-            self.imgs.append(np.array(img))
+            aimg = np.array(img)
+            aimg = aimg.mean(2)
+            self.imgs.append(aimg)
+
             if i % 1000 == 0: print(i)
-bc = BarrColors(100000)
+bc = BarrColors(10000)
 np.save("rodsdb", bc.imgs)
+np.save("rodsdb_labels", bc.orientations)
