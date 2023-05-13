@@ -5,7 +5,7 @@ Supervised topological maps (STMs) are a type of machine learning algorithm that
 
 ## Introduction
 
-Controlling the internal representation space of a neural network is a desirable feature because it allows for the generation of new data in a supervised manner. In a recent paper by Mannella et al. (2020), they proposed a novel approach to achieving this using a variation of the SOM algorithm, which they call Supervised Topological Maps (STMs).
+Controlling the internal representation space of a neural network is a desirable feature because it allows for the generation of new data in a supervised manner. In a recent paper by Mannella et al. (2020), they proposed a novel approach to achieving this using a variation of the SOM algorithm, called Supervised Topological Maps (STMs).
 
 ## Training STMs
 
