@@ -9,16 +9,20 @@ class DimensionalityError(Exception):
 
 
 class RadialBasis:
-    """build radial grids in 1D or 2D based on a centroid"""
-
+    """
+    This code creates a radial grid in either 1D or 2D based on a given
+    centroid. It can be used to generate a grid of points around a central
+    point.
+    """
     def __init__(self, size, dims):
         """
-        Arguments:
-            size: size of the radial grid
-            dims: dimensionality of the grid.
-                if 1, it is a 1D grid. if 2, it is a 2D grid.
-        """
+        This function creates a radial grid with a given size and dimensionality. 
 
+        Args:
+            size (int): The size of the radial grid.
+            dims (int): The dimensionality of the grid (1 for 1D, 2 for 2D).
+
+        """
         self.dims = dims
         self.size = size
 
@@ -35,6 +39,16 @@ class RadialBasis:
         self.grid = self.grid.unsqueeze(dim=0).float()
 
     def __call__(self, index, std, as_point=False):
+        """
+        Args:
+            index (int): indicates the point at the center of the Gaussian on the flattened grid, arranged in rows.
+            std (float): The standard deviation of the function.
+            as_point (bool, optional): Whether to return the result as a point or not. Defaults to False.
+
+        Returns:
+            The result of the function call.
+        """
+        
         if self.dims == 1:
             x = index.unsqueeze(dim=-1)
             dists = self.grid - x
@@ -55,18 +69,20 @@ class RadialBasis:
         return output
 
 class TopologicalMap(torch.nn.Module):
-    """A topological map"""
-
+    """
+    A neural network designed to represent a topological map. The nodes are
+    connected in a way that reflects the topology of the data, allowing the network
+    to recognize patterns and make decisions based on those patterns. 
+    """
     def __init__(self, input_size, output_size, output_dims=2):
         """
-        Arguments:
-            input_size: size of the input patern
-            output_size: size of the output layer
-            output_dims: dimensionality of the output layer.
-                if 1, it is a 1D grid. if 2, it is a 2D grid.
-            init_lr: initial learning rate
-        """
 
+        Args:
+            input_size (int): The number of inputs for the network.
+            output_size (int): The number of outputs for the network.
+            output_dims (int, optional): The number of dimensions for the output. Defaults to 2.
+        """
+        
         super(TopologicalMap, self).__init__()
 
         self.weights = torch.nn.Parameter(torch.randn(input_size, output_size), 
@@ -79,8 +95,16 @@ class TopologicalMap(torch.nn.Module):
                          else int(math.sqrt(self.output_size)))
         self.curr_std = self.std_init
 
-    def forward(self, x, std):
-        """ Activation of the region of the output layer around the best-matching unit 
+    def forward(self, x: torch.Tensor, std: float) -> torch.Tensor:
+        """
+        Computes the forward pass of the model.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (N, C, H, W).
+            std (float): Standard deviation of the Gaussian noise.
+
+        Returns:
+            torch.Tensor: Output tensor of shape (N, C, H, W).
         """
         diffs = self.weights.unsqueeze(dim=0) - x.unsqueeze(dim=-1)
         norms = torch.norm(diffs, dim=1)
@@ -92,6 +116,16 @@ class TopologicalMap(torch.nn.Module):
         return norms2*phi
 
     def backward(self, point, std=None):
+        """
+        Computes the backward pass of the given point.
+
+        Args:
+            point (int): The point to compute the backward pass for.
+            std (float, optional): The standard deviation to use for the backward pass. Defaults to None.
+
+        Returns:
+            float: The result of the backward pass.
+        """
 
         if std is None: std = self.curr_std
         phi = self.radial(point, std, as_point=True)
@@ -99,14 +133,26 @@ class TopologicalMap(torch.nn.Module):
         return  output
 
 
-
 def som_loss(output):
-    """ Loss function to minimize for reproducing a Self-Organizing Map
+    """Computes the loss for reproducing a Self-Organizing Map.
+
+    Args:
+        output (array): Output of the SOM network.
+
+    Returns:
+        float: Loss value.
     """
-    return 0.5*output.mean()
+return 0.5*output.mean()
 
 def stm_loss(output, target):
-    """ Loss function to minimize for reproducing a Supervised Topological Map
+    """Calculates the loss for reproducing a Supervised Topological Map.
+
+    Args:
+        output (torch.Tensor): Output of the model.
+        target (torch.Tensor): Target of the model.
+
+    Returns:
+        torch.Tensor: Loss value.
     """
     filtered = output * target
     return 0.5*filtered.mean()

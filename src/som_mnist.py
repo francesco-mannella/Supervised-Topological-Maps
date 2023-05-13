@@ -16,7 +16,13 @@ epochs = 100
 
 
 def som_training(model, data_loader, epochs):
-    """Train a self-organizing map"""
+    """Train a self-organizing map.
+    
+    Args:
+        model (object): The SOM model to be trained.
+        data_loader (object): The data loader object used to feed data to the model.
+        epochs (int): The number of epochs to train the model for.
+    """
 
     # Initialize hyperparameters
     opt_lr = 0.02

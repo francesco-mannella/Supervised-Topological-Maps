@@ -14,7 +14,13 @@ output_size = 100
 epochs = 100
 
 def stm_training(model, data_loader, epochs):
-    """Train a supervised topological map"""
+    """Train a supervised topological map.
+    
+    Args:
+        model (object): The model to be trained.
+        data_loader (object): The data loader to be used.
+        epochs (int): The number of epochs to train for.
+    """
     
     # Initialize hyperparameters
     opt_lr = 0.2
@@ -58,9 +64,15 @@ def stm_training(model, data_loader, epochs):
             running_loss = 0.0
 
 class ColorDataset(Dataset):
-    """Labeled colors dataset. all colors are clustered into the 6 basic colors"""
+    """
+        This dataset contains labeled colors that have been grouped into the six basic colors.
+    """
 
     def __init__(self, size=1000):
+        """
+        Args:
+            size (int): The maximum size of the stack. Defaults to 1000.
+        """
         self.colors = np.array(
             [
                 [0, 1, 0], # green
@@ -97,7 +109,12 @@ class ColorDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
+        """
+            This method retrieves an item from the list of items.
 
+            Args:
+                idx (int): The index of the item to retrieve.
+        """
         sample = (
             torch.from_numpy(self.data[idx, :3]),
             torch.from_numpy(self.data[idx, 3:]),
