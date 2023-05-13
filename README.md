@@ -1,7 +1,7 @@
 
 # Supervised Topological Maps
 
-Supervised topological maps (STMs) are a type of machine learning algorithm that combines the strengths of self-organizing maps (SOMs) and supervised learning techniques. STMs are used for data visualization, clustering, and classification tasks.
+Supervised topological maps (STMs) are a type of machine learning algorithm that combines the strengths of self-organizing maps (SOMs) and supervised learning techniques.
 
 ## Introduction
 
