@@ -4,7 +4,7 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
-from topological_maps import TopologicalMap, som_loss
+from stm.topological_maps import TopologicalMap, som_loss
 
 train = True
 

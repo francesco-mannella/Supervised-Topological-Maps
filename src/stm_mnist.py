@@ -4,7 +4,7 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
-from topological_maps import TopologicalMap, stm_loss, RadialBasis
+from stm.opological_maps import TopologicalMap, stm_loss, RadialBasis
 
 
 train = False

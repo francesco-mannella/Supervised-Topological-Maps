@@ -3,7 +3,7 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
-from topological_maps import TopologicalMap, RadialBasis, stm_loss
+from stm.topological_maps import TopologicalMap, RadialBasis, stm_loss
 
 train = True
 
@@ -139,18 +139,24 @@ stm = torch.load("stm_colormap.pt")
 
 # %%
 
+weights = stm.weights.detach()
+ 
+
 # plot the learned weights
 plt.imshow(stm.weights.detach()
            .numpy()
            .reshape(3,10,10)
            .transpose(1,2,0))
-plt.scatter(*dataset.grid.T[::-1], color=dataset.colors, ec="black", s=200) 
+
+# plot the label targets
+plt.scatter(*dataset.grid.T[::-1], color=dataset.colors, ec="black", lw=3, s=200) 
 
 # a generated color
 for x in range(10):
     point = torch.rand(1, 2)*10
-    col = stm.backward(point).detach().numpy().ravel()
-    plt.scatter(*point.detach().numpy().ravel()[::-1], fc=col, ec="black", s=100)
+    projection = stm.backward(point).detach().numpy().ravel()
+    point = point.detach().numpy().ravel()
+    plt.scatter(*point, fc=projection, ec="black", s=100)
 plt.xlim([0, 9])
 plt.ylim([0, 9])
 plt.show()

@@ -142,7 +142,7 @@ def som_loss(output):
     Returns:
         float: Loss value.
     """
-return 0.5*output.mean()
+    return 0.5*output.mean()
 
 def stm_loss(output, target):
     """Calculates the loss for reproducing a Supervised Topological Map.

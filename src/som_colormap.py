@@ -3,7 +3,7 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
-from topological_maps import TopologicalMap, som_loss
+from stm.topological_maps import TopologicalMap, som_loss
 
 train = True
 
@@ -78,8 +78,9 @@ plt.imshow(som.weights.detach()
 # a generated color
 for x in range(10):
     point = torch.rand(1, 2)*10
-    col = som.backward(point).detach().numpy().ravel()
-    plt.scatter(*point.detach().numpy().ravel()[::-1], fc=col, ec="black", s=100)
+    projection = som.backward(point).detach().numpy().ravel()
+    point = point.detach().numpy().ravel()
+    plt.scatter(*point, fc=projection, ec="black", s=100)
 plt.xlim([0, 9])
 plt.ylim([0, 9])
 plt.show()
