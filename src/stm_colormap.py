@@ -5,20 +5,13 @@ import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 from stm.topological_maps import TopologicalMap, RadialBasis, stm_loss
 
-train = True
-
-# training parameters
-batch_size = 50
-input_size = 3
-output_size = 100
-epochs = 100
 
 def stm_training(model, data_loader, epochs):
     """Train a supervised topological map.
     
     Args:
-        model (object): The model to be trained.
-        data_loader (object): The data loader to be used.
+        model (TopologicalMap): The model to be trained.
+        data_loader (torch.utils.DataLoader): The data loader to be used.
         epochs (int): The number of epochs to train for.
     """
     
@@ -121,43 +114,53 @@ class ColorDataset(Dataset):
         )
         return sample
 
-if train == True:
+if __name__ == "__main__":
 
-    # Build the dataset and the data loader
-    dataset = ColorDataset(1000)
-    dataLoader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    train = True
 
-    # prepare the model and the optimizer
-    stm = TopologicalMap(input_size=input_size, output_size=output_size)
+    # training parameters
+    batch_size = 50
+    input_size = 3
+    output_size = 100
+    epochs = 100
 
-    # train
-    stm_training(stm, dataLoader, epochs=epochs)
+    if train == True:
+
+        # Build the dataset and the data loader
+        dataset = ColorDataset(1000)
+        dataLoader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+        # prepare the model and the optimizer
+        stm = TopologicalMap(input_size=input_size, output_size=output_size)
+
+        # train
+        stm_training(stm, dataLoader, epochs=epochs)
+        
+        torch.save(stm, "stm_colormap.pt")
+
+    stm = torch.load("stm_colormap.pt")
+
+    # %%
+
+    weights = stm.weights.detach()
     
-    torch.save(stm, "stm_colormap.pt")
 
-stm = torch.load("stm_colormap.pt")
+    # plot the learned weights
+    plt.imshow(stm.weights.detach()
+            .numpy()
+            .reshape(3,10,10)
+            .transpose(1,2,0))
 
-# %%
+    # plot the label targets
+    plt.scatter(*dataset.grid.T[::-1], color=dataset.colors, ec="black", lw=3, s=200) 
 
-weights = stm.weights.detach()
- 
-
-# plot the learned weights
-plt.imshow(stm.weights.detach()
-           .numpy()
-           .reshape(3,10,10)
-           .transpose(1,2,0))
-
-# plot the label targets
-plt.scatter(*dataset.grid.T[::-1], color=dataset.colors, ec="black", lw=3, s=200) 
-
-# a generated color
-for x in range(10):
-    point = torch.rand(1, 2)*10
-    projection = stm.backward(point).detach().numpy().ravel()
-    point = point.detach().numpy().ravel()
-    plt.scatter(*point, fc=projection, ec="black", s=100)
-plt.xlim([0, 9])
-plt.ylim([0, 9])
-plt.show()
+    # a generated color
+    for x in range(10):
+        point = torch.rand(1, 2)*10
+        projection = stm.backward(point).detach().numpy().ravel()
+        point = point.detach().numpy().ravel()
+        plt.scatter(*point, fc=projection, ec="black", s=100)
+    plt.xlim([0, 9])
+    plt.ylim([0, 9])
+    plt.show()
 

@@ -5,17 +5,13 @@ import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 from stm.topological_maps import TopologicalMap, som_loss
 
-train = True
-
-# train parameters
-batch_size = 10
-input_size = 3
-output_size = 100
-epochs = 100
-
-
 def som_training(model, data_loader, epochs):
     """ Train a self-organizing map
+    
+    Args:
+        model (object): The model to be trained.
+        data_loader (object): The data loader to be used.
+        epochs (int): The number of epochs to train for.
     """
 
     # Initialize hyperparameters
@@ -53,35 +49,45 @@ def som_training(model, data_loader, epochs):
             print(f'[{epoch}, {i:5d}] loss: {running_loss:.5f}')
             running_loss = 0.0
 
-if train == True:
+if __name__ == "__main__":
 
-    # Build the dataset and the data loader
-    dataset = np.random.rand(1000, 3)
-    dataLoader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    train = True
 
-    # prepare the model and the optimizer
-    som = TopologicalMap(input_size=input_size, output_size=output_size)
+    # train parameters
+    batch_size = 10
+    input_size = 3
+    output_size = 100
+    epochs = 100
 
-    # train
-    som_training(som, dataLoader,  epochs=epochs)
-    
-    torch.save(som, "som_colormap.pt")
+    if train == True:
 
-som = torch.load("som_colormap.pt")
+        # Build the dataset and the data loader
+        dataset = np.random.rand(1000, 3)
+        dataLoader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-# plot the learned weights
-plt.imshow(som.weights.detach()
-           .numpy()
-           .reshape(3,10,10)
-           .transpose(1,2,0))
+        # prepare the model and the optimizer
+        som = TopologicalMap(input_size=input_size, output_size=output_size)
 
-# a generated color
-for x in range(10):
-    point = torch.rand(1, 2)*10
-    projection = som.backward(point).detach().numpy().ravel()
-    point = point.detach().numpy().ravel()
-    plt.scatter(*point, fc=projection, ec="black", s=100)
-plt.xlim([0, 9])
-plt.ylim([0, 9])
-plt.show()
+        # train
+        som_training(som, dataLoader,  epochs=epochs)
+        
+        torch.save(som, "som_colormap.pt")
+
+    som = torch.load("som_colormap.pt")
+
+    # plot the learned weights
+    plt.imshow(som.weights.detach()
+            .numpy()
+            .reshape(3,10,10)
+            .transpose(1,2,0))
+
+    # plot generated colors
+    for x in range(10):
+        point = torch.rand(1, 2)*10
+        projection = som.backward(point).detach().numpy().ravel()
+        point = point.detach().numpy().ravel()
+        plt.scatter(*point, fc=projection, ec="black", s=100)
+    plt.xlim([0, 9])
+    plt.ylim([0, 9])
+    plt.show()
 
