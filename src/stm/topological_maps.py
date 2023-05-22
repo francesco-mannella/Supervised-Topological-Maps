@@ -32,7 +32,7 @@ class RadialBasis:
         elif self.dims == 2:
             self.side = int(math.sqrt(self.size))
             t =  torch.arange(self.side)
-            meshgrids = torch.meshgrid(t, t)
+            meshgrids = torch.meshgrid(t, t, indexing="ij")
             self.grid = torch.stack([x.reshape(-1) for x in meshgrids]).T
         else:
             raise DimensionalityError()
@@ -109,8 +109,8 @@ class TopologicalMap(torch.nn.Module):
         diffs = self.weights.unsqueeze(dim=0) - x.unsqueeze(dim=-1)
         norms = torch.norm(diffs, dim=1)
         norms2 = torch.pow(norms, 2)
-        idx = torch.argmin(norms, dim=-1).detach()
-        phi = self.radial(idx, std)
+        bmu = torch.argmin(norms, dim=-1).detach()
+        phi = self.radial(bmu, std)
         self.curr_std = std
 
         return norms2*phi

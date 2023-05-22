@@ -6,12 +6,12 @@ from torch.utils.data import Dataset, DataLoader
 from stm.topological_maps import TopologicalMap, som_loss
 
 def som_training(model, data_loader, epochs):
-    """ Train a self-organizing map
+    """Train a self-organizing map.
     
     Args:
-        model (object): The model to be trained.
-        data_loader (object): The data loader to be used.
-        epochs (int): The number of epochs to train for.
+        model (TopologicalMap): The SOM model to be trained.
+        data_loader (object): The data loader object used to feed data to the model.
+        epochs (int): The number of epochs to train the model for.
     """
 
     # Initialize hyperparameters
@@ -29,7 +29,7 @@ def som_training(model, data_loader, epochs):
         
         std = std_baseline + model.std_init*std_gamma**epoch
         lr = model.std_init*lr_gamma**epoch 
-        
+
         for i, data in enumerate(data_loader):
             
             inputs = data
@@ -38,7 +38,6 @@ def som_training(model, data_loader, epochs):
             optimizer.zero_grad()
 
             # forward + backward + optimize
-
             outputs = model(inputs, std)
             loss = lr*som_loss(outputs)
             loss.backward()
