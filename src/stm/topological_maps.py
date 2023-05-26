@@ -43,7 +43,7 @@ class RadialBasis:
         Args:
             index (int): indicates the point at the center of the Gaussian on the flattened grid, arranged in rows.
             std (float): The standard deviation of the function.
-            as_point (bool, optional): Whether to return the result as a point or not. Defaults to False.
+            as_point (bool, optional): Whether to treat index as a point or not. Defaults to False.
 
         Returns:
             The result of the function call.

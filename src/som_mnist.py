@@ -5,6 +5,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 from stm.topological_maps import TopologicalMap, som_loss
+import matplotlib
+matplotlib.use("agg")
 
 def som_training(model, data_loader, epochs):
     """Train a self-organizing map.
@@ -16,12 +18,12 @@ def som_training(model, data_loader, epochs):
     """
 
     # Initialize hyperparameters
-    opt_lr = 2.5
+    opt_lr = 0.5
     final_lr_prop = 1e-4
     lr_gamma = np.exp(np.log(final_lr_prop)/epochs)
     final_std_prop = 1e-4
     std_gamma = np.exp(np.log(final_std_prop)/epochs)
-    std_baseline = 1 
+    std_baseline = 0.7
     
     optimizer = torch.optim.Adam(model.parameters(), lr=opt_lr)
 
@@ -58,7 +60,7 @@ if __name__ == "__main__":
     input_size = 28*28
     output_size = 10*10
     batch_size = 10000
-    epochs = 20
+    epochs = 400
 
     if train == True:
 
@@ -95,9 +97,9 @@ if __name__ == "__main__":
         .reshape(28 * 10, 28 * 10)
     )
 
-    plt.ion()
-    fig = plt.figure(figsize=(12, 5))
-    ax1 = fig.add_subplot(121)
+    fig = plt.figure(figsize=(11, 7))
+    spec = gridspec.GridSpec(ncols=14, nrows=10, figure=fig)
+    ax1 = fig.add_subplot(spec[:10, :10])
     ax1.imshow(w, cmap=plt.cm.gray)
     sc = ax1.scatter(-1,-1, fc="red", ec="white", s=100)
     ax1.set_xlim(0, 28*10)
@@ -106,7 +108,7 @@ if __name__ == "__main__":
     ax1.set_yticks([])
     ax1.set_axis_off()
 
-    ax2 = fig.add_subplot(122)
+    ax2 = fig.add_subplot(spec[:4, 10:])
     ax2.set_xlim(0, 28)
     ax2.set_ylim(28, 0)
     ax2.set_xticks([])
@@ -114,15 +116,14 @@ if __name__ == "__main__":
     ax2.set_axis_off()
     img = ax2.imshow(np.zeros([28, 28]), 
                     cmap=plt.cm.gray, vmin=0, vmax=1)
+    
 
     # a generated color
     for x in range(10):
         point = torch.rand(1, 2)*10
         num = som.backward(point).detach().numpy().ravel()
-        sc.set_offsets(point.detach().numpy().ravel()[::-1]*28)
+        sc.set_offsets(point.detach().numpy().ravel()*28)
         img.set_array(num.reshape(28, 28))
-        plt.pause(2)
 
-
-
-
+        fig.canvas.draw()
+        fig.savefig(f"stm_mnist_{x:04d}.png")

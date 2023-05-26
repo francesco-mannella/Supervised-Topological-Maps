@@ -4,6 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 from stm.topological_maps import TopologicalMap, RadialBasis, stm_loss
+import matplotlib
+matplotlib.use("agg")
 
 
 def stm_training(model, data_loader, epochs):
@@ -44,7 +46,7 @@ def stm_training(model, data_loader, epochs):
             # forward
             outputs = model(inputs, std)
             # loss depends also on radial grids centered on label points
-            rlabels = radial(labels.reshape(-1), 0.3*model.std_init )
+            rlabels = radial(labels, 0.1*model.std_init, as_point=True )
             loss = lr*stm_loss(outputs, rlabels)
 
             # backward + optimize
@@ -89,14 +91,13 @@ class ColorDataset(Dataset):
         for i in range(size):
             k = i % 6
             points[i, :] = np.maximum(0, np.minimum(1, self.colors[k] + 0.2*np.random.randn(3)))
-
-        igrid = np.array([x * 10 + y for x, y in self.grid])
-        labels = np.expand_dims(points, 1) - np.expand_dims(self.colors, 0)
-        labels = np.linalg.norm(labels, axis=-1)
-        labels = np.argmin(labels, axis=-1)
-        labels = igrid[labels]
-
-        self.data = np.hstack([points, labels.reshape(-1, 1)])
+        
+        labels = points.reshape(-1, 1, 3) - self.colors.reshape(1, -1, 3)
+        labels = np.linalg.norm(labels, axis=2)
+        idcs = np.argmin(labels, axis=1)
+        labels = self.grid[idcs,:]
+        self.labels = labels
+        self.data = points
 
     def __len__(self):
         return len(self.data)
@@ -109,8 +110,8 @@ class ColorDataset(Dataset):
                 idx (int): The index of the item to retrieve.
         """
         sample = (
-            torch.from_numpy(self.data[idx, :3]),
-            torch.from_numpy(self.data[idx, 3:]),
+                torch.from_numpy(self.data[idx, :]),
+                torch.from_numpy(self.labels[idx, :]),
         )
         return sample
 
@@ -152,7 +153,7 @@ if __name__ == "__main__":
             .transpose(1,2,0))
 
     # plot the label targets
-    plt.scatter(*dataset.grid.T[::-1], color=dataset.colors, ec="black", lw=3, s=200) 
+    plt.scatter(*dataset.grid.T, color=dataset.colors, ec="black", lw=3, s=200) 
 
     # a generated color
     for x in range(10):
@@ -162,5 +163,6 @@ if __name__ == "__main__":
         plt.scatter(*point, fc=projection, ec="black", s=100)
     plt.xlim([0, 9])
     plt.ylim([0, 9])
-    plt.show()
+    plt.draw()
+    plt.savefig("stm_colormap.png")
 

@@ -3,9 +3,11 @@ from torchvision import transforms as T
 import math
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 from torch.utils.data import Dataset, DataLoader
 from stm.topological_maps import TopologicalMap, stm_loss, RadialBasis
-
+import matplotlib
+matplotlib.use("agg")
 
 def stm_training(model, data_loader, epochs):
     """Train a supervised topological map.
@@ -66,7 +68,7 @@ if __name__ == "__main__":
     input_size = 28*28
     output_size = 10*10
     batch_size = 10000
-    epochs = 40
+    epochs = 400
 
     points = np.array(
         [
@@ -102,12 +104,12 @@ if __name__ == "__main__":
         som = TopologicalMap(input_size=input_size, output_size=output_size)
 
         # train
-        som_training(som, dataLoader, epochs=epochs)
+        stm_training(som, dataLoader, epochs=epochs)
 
         # save
-        torch.save(som, "som_mnist.pt")
+        torch.save(som, "stm_mnist.pt")
 
-    som = torch.load("som_mnist.pt")
+    som = torch.load("stm_mnist.pt")
 
     # plot the learned weights
     w = (
@@ -118,9 +120,9 @@ if __name__ == "__main__":
         .reshape(28 * 10, 28 * 10)
     )
 
-    plt.ion()
-    fig = plt.figure(figsize=(12, 5))
-    ax1 = fig.add_subplot(121)
+    fig = plt.figure(figsize=(11, 7))
+    spec = gridspec.GridSpec(ncols=14, nrows=10, figure=fig)
+    ax1 = fig.add_subplot(spec[:10, :10])
     ax1.imshow(w, cmap=plt.cm.gray)
     sc = ax1.scatter(-1,-1, fc="red", ec="white", s=100)
     ax1.set_xlim(0, 28*10)
@@ -129,7 +131,7 @@ if __name__ == "__main__":
     ax1.set_yticks([])
     ax1.set_axis_off()
 
-    ax2 = fig.add_subplot(122)
+    ax2 = fig.add_subplot(spec[:4, 10:])
     ax2.set_xlim(0, 28)
     ax2.set_ylim(28, 0)
     ax2.set_xticks([])
@@ -137,53 +139,24 @@ if __name__ == "__main__":
     ax2.set_axis_off()
     img = ax2.imshow(np.zeros([28, 28]), 
                     cmap=plt.cm.gray, vmin=0, vmax=1)
+    
+    ax3 = fig.add_subplot(spec[6:, 10:])
+    ax3.set_xlim(0, 10)
+    ax3.set_ylim(10, 0)
+    ax3.set_xticks([0, 9])
+    ax3.set_yticks([0, 9])
+    #ax3.set_axis_off()
+    ax3.scatter(*points.T)
+    for i, point in enumerate(points):
+        ax3.text(*(point + [0.5, -0.5]), f'{i}', size=20, ha="center", va="center")
+        ax3.text(*(point)+ [0.5, -0.5], f'{i}', size=20, ha="center", va="center")
 
     # a generated color
     for x in range(10):
         point = torch.rand(1, 2)*10
         num = som.backward(point).detach().numpy().ravel()
-        sc.set_offsets(point.detach().numpy().ravel()[::-1]*28)
+        sc.set_offsets(point.detach().numpy().ravel()*28)
         img.set_array(num.reshape(28, 28))
-        plt.pause(2)
 
-
-
-
-        plt.ion()
-        fig = plt.figure(figsize=(12, 5))
-        ax1 = fig.add_subplot(131)
-        ax1.imshow(w, cmap=plt.cm.gray)
-        sc = ax1.scatter(-1, -1, fc="red", ec="white", s=100)
-        ax1.set_xticks([])
-        ax1.set_yticks([])
-        ax1.set_xlim(0, 10 * 28)
-        ax1.set_ylim(10 * 28, 0)
-
-        ax2 = fig.add_subplot(132, aspect="equal")
-        ax2.set_xlim(0, 10)
-        ax2.set_ylim(10, 0)
-
-        ax2.scatter(*points.T)
-        for i, (x, y) in enumerate(points):
-            ax2.text(y - 0.2, x - 0.2, f"{i}", ha="center", size=12)
-
-        ax2.set_xticks([])
-        ax2.set_yticks([])
-        ax2.set_xlim(0, 10)
-        ax2.set_ylim(10, 0)
-
-        ax3 = fig.add_subplot(133)
-        ax3.set_xlim(0, 28)
-        ax3.set_ylim(28, 0)
-        ax3.set_xticks([])
-        ax3.set_yticks([])
-        ax3.set_axis_off()
-        img = ax3.imshow(np.zeros([28, 28]), cmap=plt.cm.gray, vmin=0, vmax=1)
-
-        # a generated color
-        for x in range(10):
-            point = torch.rand(1, 2) * 10
-            num = stm.backward(point).detach().numpy().ravel()
-            sc.set_offsets(point.detach().numpy().ravel() * 28)
-            img.set_array(num.reshape(28, 28))
-            plt.pause(2)
+        fig.canvas.draw()
+        fig.savefig(f"stm_mnist_{x:04d}.png")
