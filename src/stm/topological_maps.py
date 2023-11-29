@@ -31,6 +31,8 @@ class RadialBasis:
             self.side = self.size
         elif self.dims == 2:
             self.side = int(math.sqrt(self.size))
+            if self.side**2 != self.size:
+                raise "Dinensions must be equal"
             t =  torch.arange(self.side)
             meshgrids = torch.meshgrid(t, t, indexing="ij")
             self.grid = torch.stack([x.reshape(-1) for x in meshgrids]).T
@@ -94,6 +96,8 @@ class TopologicalMap(torch.nn.Module):
         self.std_init = (self.output_size if output_dims == 1 
                          else int(math.sqrt(self.output_size)))
         self.curr_std = self.std_init
+        self.bmu = None
+        self.side = None if output_dims == 1 else int(math.sqrt(self.output_size))
 
     def forward(self, x: torch.Tensor, std: float) -> torch.Tensor:
         """
@@ -109,11 +113,40 @@ class TopologicalMap(torch.nn.Module):
         diffs = self.weights.unsqueeze(dim=0) - x.unsqueeze(dim=-1)
         norms = torch.norm(diffs, dim=1)
         norms2 = torch.pow(norms, 2)
-        bmu = torch.argmin(norms, dim=-1).detach()
-        phi = self.radial(bmu, std)
+        self.bmu = torch.argmin(norms, dim=-1).detach()
+        phi = self.radial(self.bmu, std)
         self.curr_std = std
 
         return norms2*phi
+
+    def get_representation(self, rtype="point"):
+        """Returns the representation of the best matching unit (BMU) based on
+        the specified representation type.
+
+        Args:
+            rtype (str, optional): The representation type to be returned. Valid
+                values are: "point" (default) and "grid".
+
+        Returns:
+            torch.Tensor or None: The representation of the BMU. Returns
+            None if the BMU is not available.
+        """
+        if self.bmu is not None:
+            if rtype == "point":
+                if self.output_dims == 1:
+                    return self.bmu.tolist() 
+
+                elif self.output_dims == 2:
+                    row = self.bmu // self.side
+                    col = self.bmu % self.side
+                    return torch.stack([row, col]).T.tolist() 
+
+            elif rtype == "grid":
+                std = self.curr_std
+                phi = self.radial(self.bmu, std)
+                return phi.tolist()
+        else:
+            return None
 
     def backward(self, point, std=None):
         """

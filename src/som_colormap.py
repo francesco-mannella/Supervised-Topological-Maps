@@ -50,7 +50,7 @@ def som_training(model, data_loader, epochs):
 
 if __name__ == "__main__":
 
-    train = True
+    train = False
 
     # train parameters
     batch_size = 10
@@ -89,4 +89,6 @@ if __name__ == "__main__":
     plt.xlim([0, 9])
     plt.ylim([0, 9])
     plt.show()
+
+    som.get_representation("grid")
 
