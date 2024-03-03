@@ -1,4 +1,5 @@
 import torch
+import torch.optim as optim
 import math
 import numpy as np
 
@@ -76,19 +77,25 @@ class TopologicalMap(torch.nn.Module):
     connected in a way that reflects the topology of the data, allowing the network
     to recognize patterns and make decisions based on those patterns. 
     """
-    def __init__(self, input_size, output_size, output_dims=2):
+    def __init__(self, input_size, output_size, output_dims=2, parameters = None):
         """
 
         Args:
             input_size (int): The number of inputs for the network.
             output_size (int): The number of outputs for the network.
             output_dims (int, optional): The number of dimensions for the output. Defaults to 2.
+            parameters (nparray): The array of initial weights. default is None
         """
         
         super(TopologicalMap, self).__init__()
 
-        self.weights = torch.nn.Parameter(torch.randn(input_size, output_size), 
+        if parameters is None:
+            self.weights = torch.nn.Parameter(torch.randn(input_size, output_size), 
                                           requires_grad=True)
+        else:
+            parameters = torch.tensor(parameters).float()
+            self.weights = torch.nn.Parameter(parameters, requires_grad=True)
+
         self.input_size = input_size
         self.output_size = output_size
         self.output_dims = output_dims
@@ -140,12 +147,12 @@ class TopologicalMap(torch.nn.Module):
                 elif self.output_dims == 2:
                     row = self.bmu // self.side
                     col = self.bmu % self.side
-                    return torch.stack([row, col]).T.tolist() 
+                    return torch.stack([row, col]).T.float() 
 
             elif rtype == "grid":
                 std = self.curr_std
                 phi = self.radial(self.bmu, std)
-                return phi.tolist()
+                return phi
         else:
             return None
 

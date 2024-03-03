@@ -3,9 +3,10 @@ from torchvision import transforms as T
 import math
 import numpy as np
 import matplotlib.pyplot as plt
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Subset
 from stm.topological_maps import TopologicalMap, som_loss
 import matplotlib
+from matplotlib import gridspec
 matplotlib.use("agg")
 
 def som_training(model, data_loader, epochs):
@@ -59,7 +60,7 @@ if __name__ == "__main__":
     # train parameters
     input_size = 28*28
     output_size = 10*10
-    batch_size = 10000
+    batch_size = 100
     epochs = 400
 
     if train == True:
@@ -75,7 +76,11 @@ if __name__ == "__main__":
                 T.Lambda(lambda x: (x - x.min())/(x.max() - x.min()))
                 ]),
         )
-        dataLoader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+        K = 1000 # enter your length here
+        subsample_train_indices = torch.randperm(len(dataset))[:K]
+        subset = Subset(dataset, indices=subsample_train_indices)
+        dataLoader = DataLoader(subset, batch_size=batch_size, shuffle=True)
 
         # prepare the model and the optimizer
         som = TopologicalMap(input_size=input_size, output_size=output_size)
@@ -96,6 +101,8 @@ if __name__ == "__main__":
         .transpose(2, 0, 3, 1)
         .reshape(28 * 10, 28 * 10)
     )
+
+# %%
 
     fig = plt.figure(figsize=(11, 7))
     spec = gridspec.GridSpec(ncols=14, nrows=10, figure=fig)
@@ -127,3 +134,26 @@ if __name__ == "__main__":
 
         fig.canvas.draw()
         fig.savefig(f"stm_mnist_{x:04d}.png")
+
+    # %%
+
+
+    rdata = [d for d, l in subset]
+    rdata = [rdata[38], rdata[231]]
+
+    for i in rdata:
+
+        _ = som(i.reshape(1, -1), .8)
+        m = np.stack(som.get_representation("grid"))
+        
+        fig, ax = subplots(2, 1, figsize=(4, 8))
+        ax[0].imshow(m.reshape(10, 10), cmap=plt.cm.binary) 
+        ax[1].imshow(i.reshape(28, 28), cmap=plt.cm.gray)
+        ax[0].set_xticks([])
+        ax[0].set_yticks([])
+        ax[1].set_xticks([])
+        ax[1].set_yticks([])
+        plt.show()
+
+
+
