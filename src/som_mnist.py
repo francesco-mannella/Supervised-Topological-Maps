@@ -16,42 +16,72 @@ def som_training(model, data_loader, epochs):
         model (TopologicalMap): The SOM model to be trained.
         data_loader (object): The data loader object used to feed data to the model.
         epochs (int): The number of epochs to train the model for.
-    """
-
-    # Initialize hyperparameters
-    opt_lr = 0.5
-    final_lr_prop = 1e-4
-    lr_gamma = np.exp(np.log(final_lr_prop)/epochs)
-    final_std_prop = 1e-4
-    std_gamma = np.exp(np.log(final_std_prop)/epochs)
-    std_baseline = 0.7
     
+    Returns:
+        lr_values (list): List of learning rate values for each epoch.
+        loss_values (list): List of loss values for each epoch.
+        activations_data (list): List of activation data for each epoch.
+        weights_data (list): List of weight data for each epoch.
+    """
+    
+    # Initialize hyperparameters
+    opt_lr = 0.02
+    final_lr_prop = 0.0000001
+    lr_gamma = np.exp(np.log(final_lr_prop) / epochs)
+    final_std_prop = 0.000001
+    std_gamma = np.exp(np.log(final_std_prop) / epochs)
+    std_baseline = 1
+    
+    # Initialize optimizer for model parameters
     optimizer = torch.optim.Adam(model.parameters(), lr=opt_lr)
+    
+    # Initialize lists to store output values
+    lr_values = []
+    loss_values = []
+    activations_data = []
+    weights_data = []
 
+    # Iterate over epochs
     for epoch in range(epochs):
         running_loss = 0.0
         
-        std = std_baseline + model.std_init*std_gamma**epoch
-        lr = model.std_init*lr_gamma**epoch 
-        optimizer.param_groups[0]["lr"] = lr
+        # Calculate standard deviation for current epoch
+        std = std_baseline + model.std_init * std_gamma**epoch
+        
+        # Calculate learning rate for current epoch
+        lr = model.std_init * lr_gamma**epoch
 
+        # Iterate over data batches
         for i, data in enumerate(data_loader):
-
             inputs, _ = data
 
-            # zero the parameter gradients
             optimizer.zero_grad()
-
-            # forward + backward + optimize
+            
+            # Forward pass through the model
             outputs = model(inputs, std)
-            loss = lr*som_loss(outputs)
+            
+            # Calculate loss
+            sloss =  som_loss(outputs)
+            loss = lr * sloss
+            
+            # Backward pass and update gradients
             loss.backward()
             optimizer.step()
 
-            # print statistics
-            running_loss += loss.item()
+            running_loss += sloss.item()
+
+            # Print loss
             print(f'[{epoch}, {i:5d}] loss: {running_loss:.5f}')
-            running_loss = 0.0
+            
+
+        # Append values to corresponding lists
+        lr_values.append(lr)
+        loss_values.append(running_loss)
+        activations_data.append(np.stack(model.get_representation("grid")))
+        weights_data.append(np.stack(model.weights.tolist()))
+    
+    # Return output values
+    return lr_values, loss_values, activations_data, weights_data
 
 if __name__ == "__main__":
 
@@ -86,7 +116,7 @@ if __name__ == "__main__":
         som = TopologicalMap(input_size=input_size, output_size=output_size)
 
         # train
-        som_training(som, dataLoader, epochs=epochs)
+        stored_data = som_training(som, dataLoader, epochs=epochs)
 
         # save
         torch.save(som, "som_mnist.pt")
@@ -146,7 +176,7 @@ if __name__ == "__main__":
         _ = som(i.reshape(1, -1), .8)
         m = np.stack(som.get_representation("grid"))
         
-        fig, ax = subplots(2, 1, figsize=(4, 8))
+        fig, ax = plt.subplots(2, 1, figsize=(4, 8))
         ax[0].imshow(m.reshape(10, 10), cmap=plt.cm.binary) 
         ax[1].imshow(i.reshape(28, 28), cmap=plt.cm.gray)
         ax[0].set_xticks([])

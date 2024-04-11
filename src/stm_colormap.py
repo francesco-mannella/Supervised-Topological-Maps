@@ -4,17 +4,21 @@ import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 from stm.topological_maps import TopologicalMap, RadialBasis, stm_loss
-import matplotlib
-matplotlib.use("agg")
 
 
 def stm_training(model, data_loader, epochs):
     """Train a supervised topological map.
     
     Args:
-        model (TopologicalMap): The model to be trained.
-        data_loader (torch.utils.DataLoader): The data loader to be used.
-        epochs (int): The number of epochs to train for.
+        model (TopologicalMap): Instance of the TopologicalMap class to be trained.
+        data_loader (torch.utils.DataLoader): Data loader containing training data.
+        epochs (int): Number of epochs to train the model for.
+    
+    Returns:
+        lr_values (list): Learning rates used in each epoch.
+        loss_values (list): Loss values for each epoch.
+        activations_data (list): Activation data obtained during training.
+        weights_data (list): Model weights at each epoch.
     """
     
     # Initialize hyperparameters
@@ -26,6 +30,12 @@ def stm_training(model, data_loader, epochs):
     std_baseline = 0.6
 
     optimizer = torch.optim.Adam(model.parameters(), lr=opt_lr)
+    
+    # Initialize lists to store output values
+    lr_values = []
+    loss_values = []
+    activations_data = []
+    weights_data = []
 
     # function to get the radial grid from a central point
     radial = RadialBasis(model.output_size, model.output_dims)
@@ -47,16 +57,27 @@ def stm_training(model, data_loader, epochs):
             outputs = model(inputs, std)
             # loss depends also on radial grids centered on label points
             rlabels = radial(labels, 0.1*model.std_init, as_point=True )
-            loss = lr*stm_loss(outputs, rlabels)
+            stmloss = stm_loss(outputs, rlabels)
+            loss = lr*stmloss
 
             # backward + optimize
             loss.backward()
             optimizer.step()
 
             # print statistics
-            running_loss += loss.item()
+
+            running_loss += stmloss.item()
             print(f"[{epoch}, {i:5d}] loss: {running_loss:.6f}")
-            running_loss = 0.0
+
+
+        # Append values to corresponding lists
+        lr_values.append(lr)
+        loss_values.append(running_loss)
+        activations_data.append(np.stack(model.get_representation("grid")))
+        weights_data.append(np.stack(model.weights.tolist()))
+    
+    # Return output values
+    return lr_values, loss_values, activations_data, weights_data
 
 class ColorDataset(Dataset):
     """
@@ -135,7 +156,7 @@ if __name__ == "__main__":
         stm = TopologicalMap(input_size=input_size, output_size=output_size)
 
         # train
-        stm_training(stm, dataLoader, epochs=epochs)
+        stored_data = stm_training(stm, dataLoader, epochs=epochs)
         
         torch.save(stm, "stm_colormap.pt")
 
