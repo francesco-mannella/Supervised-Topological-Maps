@@ -126,13 +126,15 @@ class TopologicalMap(torch.nn.Module):
 
         return norms2*phi
 
-    def get_representation(self, rtype="point"):
+    def get_representation(self, rtype="point", std=None):
         """Returns the representation of the best matching unit (BMU) based on
         the specified representation type.
 
         Args:
             rtype (str, optional): The representation type to be returned. Valid
                 values are: "point" (default) and "grid".
+            std  (float, optional): The standard deviation determining the 
+                cloud of activation around BMU in case of grid representation
 
         Returns:
             torch.Tensor or None: The representation of the BMU. Returns
@@ -149,7 +151,7 @@ class TopologicalMap(torch.nn.Module):
                     return torch.stack([row, col]).T.float() 
 
             elif rtype == "grid":
-                std = self.curr_std
+                if std is None: std = self.curr_std
                 phi = self.radial(self.bmu, std)
                 return phi
         else:
@@ -198,3 +200,44 @@ def stm_loss(output, target):
     return 0.5*filtered.mean()
 
 
+class STMUpdater:
+    """
+    Class for updating a Supervised Topological Map (STM) model.
+    
+    Parameters:
+    stm (torch model): The STM model to be updated
+    learning_rate (float): The learning rate used by the optimizer
+    """
+
+    def __init__(self, stm, learning_rate):
+        """
+        Initializes the STMUpdater object with the provided STM model and learning rate.
+
+        Args:
+        stm (torch model): The STM model to be updated
+        learning_rate (float): The learning rate used by the optimizer
+        """
+
+        self.optimizer = optim.Adam(
+            params=stm.parameters(), lr=learning_rate
+        )
+
+        self.loss = stm_loss
+
+    def __call__(self, output, target, learning_modulation):
+        """
+        Update the STM model based on the given output, target, and learning modulation factor.
+
+        Args:
+        output (torch.Tensor): The output predicted by the STM model
+        target (torch.Tensor): The target output for the STM model
+        learning_modulation (float): Modulation factor for learning rate
+
+        Returns:
+        None
+        """
+
+        loss = learning_modulation * self.loss(output, target)
+        loss.backward(retain_graph=True)
+        self.optimizer.step()
+        self.optimizer.zero_grad()
