@@ -56,6 +56,7 @@ class RadialBasis:
             dists = self.grid - x
         elif self.dims == 2:
             if as_point:
+                index = index.reshape(-1, 2)
                 col, row = index[:, 0], index[:, 1]
             else:
                 row = index // self.side
@@ -89,8 +90,9 @@ class TopologicalMap(torch.nn.Module):
         super(TopologicalMap, self).__init__()
 
         if parameters is None:
-            self.weights = torch.nn.Parameter(torch.randn(input_size, output_size), 
-                                          requires_grad=True)
+            weights = torch.empty(input_size, output_size)
+            torch.nn.init.xavier_normal_(weights)
+            self.weights = torch.nn.Parameter(weights, requires_grad=True)
         else:
             parameters = torch.tensor(parameters).float()
             self.weights = torch.nn.Parameter(parameters, requires_grad=True)
@@ -116,25 +118,35 @@ class TopologicalMap(torch.nn.Module):
         Returns:
             torch.Tensor: Output tensor of shape (N, C, H, W).
         """
+
+        # Calculate the differences between each weight and input x along a new dimension
         diffs = self.weights.unsqueeze(dim=0) - x.unsqueeze(dim=-1)
+
+        # Compute the Euclidean norms of the differences along dimension 1
         norms = torch.norm(diffs, dim=1)
+
+        # Square the norms to obtain squared distances
         norms2 = torch.pow(norms, 2)
+
+        # Find the index of the minimum norm (best matching unit) along dimension -1 and detach it from the computation graph
         self.bmu = torch.argmin(norms, dim=-1).detach()
+
+        # Apply the radial function to the best matching unit with the given standard deviation
         phi = self.radial(self.bmu, std)
+
         self.curr_std = std
         self.norms = norms
+        self.phi = phi
 
         return norms2*phi
 
-    def get_representation(self, rtype="point", std=None):
+    def get_representation(self, rtype="point"):
         """Returns the representation of the best matching unit (BMU) based on
         the specified representation type.
 
         Args:
             rtype (str, optional): The representation type to be returned. Valid
                 values are: "point" (default) and "grid".
-            std  (float, optional): The standard deviation determining the 
-                cloud of activation around BMU in case of grid representation
 
         Returns:
             torch.Tensor or None: The representation of the BMU. Returns
@@ -143,7 +155,7 @@ class TopologicalMap(torch.nn.Module):
         if self.bmu is not None:
             if rtype == "point":
                 if self.output_dims == 1:
-                    return self.bmu.float() 
+                    return self.bmu.tolist() 
 
                 elif self.output_dims == 2:
                     row = self.bmu // self.side
@@ -151,7 +163,7 @@ class TopologicalMap(torch.nn.Module):
                     return torch.stack([row, col]).T.float() 
 
             elif rtype == "grid":
-                if std is None: std = self.curr_std
+                std = self.curr_std
                 phi = self.radial(self.bmu, std)
                 return phi
         else:
@@ -171,7 +183,7 @@ class TopologicalMap(torch.nn.Module):
 
         if std is None: std = self.curr_std
         phi = self.radial(point, std, as_point=True)
-        output = torch.matmul(phi, self.weights.T).T
+        output = torch.matmul(phi, self.weights.T)
         return  output
 
 
@@ -222,22 +234,28 @@ class STMUpdater:
             params=stm.parameters(), lr=learning_rate
         )
 
+        self.loss = som_loss
+
+    def __call__(self, output,  learning_modulation):
+    
+        loss = learning_modulation * self.loss(output)        
+        loss.backward(retain_graph=True)
+        self.optimizer.step()
+        self.optimizer.zero_grad()
+
+class STMUpdater:
+
+    def __init__(self, stm, learning_rate):
+
+        self.optimizer = optim.Adam(
+            params=stm.parameters(), lr=learning_rate
+        )
+
         self.loss = stm_loss
 
     def __call__(self, output, target, learning_modulation):
-        """
-        Update the STM model based on the given output, target, and learning modulation factor.
-
-        Args:
-        output (torch.Tensor): The output predicted by the STM model
-        target (torch.Tensor): The target output for the STM model
-        learning_modulation (float): Modulation factor for learning rate
-
-        Returns:
-        None
-        """
-
-        loss = learning_modulation * self.loss(output, target)
+    
+        loss = learning_modulation * self.loss(output, target)        
         loss.backward(retain_graph=True)
         self.optimizer.step()
         self.optimizer.zero_grad()
