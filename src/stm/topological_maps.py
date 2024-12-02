@@ -1,5 +1,4 @@
 import torch
-import torch.optim as optim
 import math
 import numpy as np
 
@@ -142,7 +141,7 @@ class TopologicalMap(torch.nn.Module):
         if self.bmu is not None:
             if rtype == "point":
                 if self.output_dims == 1:
-                    return self.bmu.tolist() 
+                    return self.bmu.float() 
 
                 elif self.output_dims == 2:
                     row = self.bmu // self.side
