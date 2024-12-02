@@ -212,7 +212,7 @@ def stm_loss(output, target):
     return 0.5*filtered.mean()
 
 
-class STMUpdater:
+class SOMUpdater:
     """
     Class for updating a Supervised Topological Map (STM) model.
     
