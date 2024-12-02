@@ -56,6 +56,7 @@ class RadialBasis:
             dists = self.grid - x
         elif self.dims == 2:
             if as_point:
+                index = index.reshape(-1, 2)
                 col, row = index[:, 0], index[:, 1]
             else:
                 row = index // self.side
@@ -89,8 +90,9 @@ class TopologicalMap(torch.nn.Module):
         super(TopologicalMap, self).__init__()
 
         if parameters is None:
-            self.weights = torch.nn.Parameter(torch.randn(input_size, output_size), 
-                                          requires_grad=True)
+            weights = torch.empty(input_size, output_size)
+            torch.nn.init.xavier_normal_(weights)
+            self.weights = torch.nn.Parameter(weights, requires_grad=True)
         else:
             parameters = torch.tensor(parameters).float()
             self.weights = torch.nn.Parameter(parameters, requires_grad=True)
@@ -116,13 +118,25 @@ class TopologicalMap(torch.nn.Module):
         Returns:
             torch.Tensor: Output tensor of shape (N, C, H, W).
         """
+
+        # Calculate the differences between each weight and input x along a new dimension
         diffs = self.weights.unsqueeze(dim=0) - x.unsqueeze(dim=-1)
+
+        # Compute the Euclidean norms of the differences along dimension 1
         norms = torch.norm(diffs, dim=1)
+
+        # Square the norms to obtain squared distances
         norms2 = torch.pow(norms, 2)
+
+        # Find the index of the minimum norm (best matching unit) along dimension -1 and detach it from the computation graph
         self.bmu = torch.argmin(norms, dim=-1).detach()
+
+        # Apply the radial function to the best matching unit with the given standard deviation
         phi = self.radial(self.bmu, std)
+
         self.curr_std = std
         self.norms = norms
+        self.phi = phi
 
         return norms2*phi
 
@@ -169,7 +183,7 @@ class TopologicalMap(torch.nn.Module):
 
         if std is None: std = self.curr_std
         phi = self.radial(point, std, as_point=True)
-        output = torch.matmul(phi, self.weights.T).T
+        output = torch.matmul(phi, self.weights.T)
         return  output
 
 
@@ -198,3 +212,50 @@ def stm_loss(output, target):
     return 0.5*filtered.mean()
 
 
+class STMUpdater:
+    """
+    Class for updating a Supervised Topological Map (STM) model.
+    
+    Parameters:
+    stm (torch model): The STM model to be updated
+    learning_rate (float): The learning rate used by the optimizer
+    """
+
+    def __init__(self, stm, learning_rate):
+        """
+        Initializes the STMUpdater object with the provided STM model and learning rate.
+
+        Args:
+        stm (torch model): The STM model to be updated
+        learning_rate (float): The learning rate used by the optimizer
+        """
+
+        self.optimizer = optim.Adam(
+            params=stm.parameters(), lr=learning_rate
+        )
+
+        self.loss = som_loss
+
+    def __call__(self, output,  learning_modulation):
+    
+        loss = learning_modulation * self.loss(output)        
+        loss.backward(retain_graph=True)
+        self.optimizer.step()
+        self.optimizer.zero_grad()
+
+class STMUpdater:
+
+    def __init__(self, stm, learning_rate):
+
+        self.optimizer = optim.Adam(
+            params=stm.parameters(), lr=learning_rate
+        )
+
+        self.loss = stm_loss
+
+    def __call__(self, output, target, learning_modulation):
+    
+        loss = learning_modulation * self.loss(output, target)        
+        loss.backward(retain_graph=True)
+        self.optimizer.step()
+        self.optimizer.zero_grad()

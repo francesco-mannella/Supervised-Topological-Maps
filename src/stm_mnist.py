@@ -13,11 +13,17 @@ def stm_training(model, data_loader, epochs):
     """Train a supervised topological map.
     
     Args:
-        model (TopologicalMap): STM model to be trained.
-        data_loader (object): The data loader object used to feed data to the model.
-        epochs (int): The number of epochs to train the model for.
+        model (TopologicalMap): Instance of the TopologicalMap class to be trained.
+        data_loader (torch.utils.DataLoader): Data loader containing training data.
+        epochs (int): Number of epochs to train the model for.
+    
+    Returns:
+        lr_values (list): Learning rates used in each epoch.
+        loss_values (list): Loss values for each epoch.
+        activations_data (list): Activation data obtained during training.
+        weights_data (list): Model weights at each epoch.
     """
-
+    
     # Initialize hyperparameters
     opt_lr = 0.5
     final_lr_prop = 1e-4
@@ -25,18 +31,23 @@ def stm_training(model, data_loader, epochs):
     final_std_prop = 1e-4
     std_gamma = np.exp(np.log(final_std_prop)/epochs)
     std_baseline = 0.7
-    
+
     optimizer = torch.optim.Adam(model.parameters(), lr=opt_lr)
+    
+    # Initialize lists to store output values
+    lr_values = []
+    loss_values = []
+    activations_data = []
+    weights_data = []
 
     # function to get the radial grid from a central point
     radial = RadialBasis(model.output_size, model.output_dims)
 
     for epoch in range(epochs):
         running_loss = 0.0
-        
+
         std = std_baseline + model.std_init*std_gamma**epoch
         lr = model.std_init*lr_gamma**epoch 
-        optimizer.param_groups[0]["lr"] = lr
 
         for i, data in enumerate(data_loader):
 
@@ -50,15 +61,27 @@ def stm_training(model, data_loader, epochs):
             # loss depends also on radial grids centered on label points
             tags = torch.tensor(points[labels])
             rlabels = radial(tags, std, as_point=True)
-            loss = lr*stm_loss(outputs, rlabels)
+            stmloss = stm_loss(outputs, rlabels)
+            loss = lr*stmloss
+
             # backward + optimize
             loss.backward()
             optimizer.step()
 
             # print statistics
-            running_loss += loss.item()
-            print(f'[{epoch}, {i:5d}] loss: {running_loss:.5f}')
-            running_loss = 0.0
+
+            running_loss += stmloss.item()
+            print(f"[{epoch}, {i:5d}] loss: {running_loss:.6f}")
+
+
+        # Append values to corresponding lists
+        lr_values.append(lr)
+        loss_values.append(running_loss)
+        activations_data.append(np.stack(model.get_representation("grid")))
+        weights_data.append(np.stack(model.weights.tolist()))
+    
+    # Return output values
+    return lr_values, loss_values, activations_data, weights_data
 
 if __name__ == "__main__":
 
