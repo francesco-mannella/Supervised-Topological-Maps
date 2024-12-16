@@ -17,13 +17,13 @@ STMs are a kind of neural network that can be trained with unsupervised learning
 
 1. Initialize the weights of the SOM randomly
 2. For each input vector x do the following:
-   a. Find the best matching unit (BMU) in the SOM for x
-   b. Update the weights of the BMU and its neighbors using the following formula:
+   1. Find the best matching unit (BMU) in the SOM for x
+   2. Update the weights of the BMU and its neighbors using the following formula:
 
          w_i(t+1) = w_i(t) + η(t) *  h(i, trg)(t) * h(i, BMU)(t) * (x - w_i(t))
       
       where **w_i(t)** is the weight of the ith neuron at time t, **η(t)** is the learning rate at time t, **h(i, j)(t)** is the neighborhood function between the i-th neuron and the j-th neuron at time t, **x** is the input vector and **trg** is the target position in the neurons' space for the input **x**
    c. Update the learning rate and neighborhood function according to a predefined schedule
-3. Repeat step 2 for a fixed number of epochs or until convergence
-4. Train a classifier on the labeled data using the SOM as a feature extractor
-5. Evaluate the performance of the classifier on a test set
+4. Repeat step 2 for a fixed number of epochs or until convergence
+5. Train a classifier on the labeled data using the SOM as a feature extractor
+6. Evaluate the performance of the classifier on a test set
