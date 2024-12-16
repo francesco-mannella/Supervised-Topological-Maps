@@ -4,10 +4,10 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-from torch.utils.data import Dataset, DataLoader
-from stm.topological_maps import TopologicalMap, stm_loss, RadialBasis
+from torch.utils.data import Dataset, DataLoader, Subset
+from stm.topological_maps import TopologicalMap, stm_loss, RadialBasis,som_stm_loss
 import matplotlib
-matplotlib.use("agg")
+#matplotlib.use("agg")
 
 def stm_training(model, data_loader, epochs):
     """Train a supervised topological map.
@@ -41,14 +41,18 @@ def stm_training(model, data_loader, epochs):
     weights_data = []
 
     # function to get the radial grid from a central point
-    radial = RadialBasis(model.output_size, model.output_dims)
-
+    #radial = RadialBasis(model.output_size, model.output_dims)
+    
     for epoch in range(epochs):
         running_loss = 0.0
-
+        
+        # Calculate standard deviation for current epoch
         std = std_baseline + model.std_init*std_gamma**epoch
+        
+        # Calculate learning rate for current epoch
         lr = model.std_init*lr_gamma**epoch 
-
+        
+        # Iterate over data batches
         for i, data in enumerate(data_loader):
 
             inputs, labels = data
@@ -56,12 +60,16 @@ def stm_training(model, data_loader, epochs):
             # zero the parameter gradients
             optimizer.zero_grad()
 
-            # forward
-            outputs = model(inputs, std)
+            # forward pass through the model
+            outputs = model(inputs)
             # loss depends also on radial grids centered on label points
-            tags = torch.tensor(points[labels])
-            rlabels = radial(tags, std, as_point=True)
-            stmloss = stm_loss(outputs, rlabels)
+            tags = torch.tensor(points[labels]).detach()
+            #tags = torch.tensor(points[labels])
+            
+            #calculate loss
+            #rlabels = radial(tags, std, as_point=True)
+            #stmloss = stm_loss(outputs, rlabels)
+            stmloss = som_stm_loss(som, outputs, std, tags =tags)
             loss = lr*stmloss
 
             # backward + optimize
@@ -77,8 +85,8 @@ def stm_training(model, data_loader, epochs):
         # Append values to corresponding lists
         lr_values.append(lr)
         loss_values.append(running_loss)
-        activations_data.append(np.stack(model.get_representation("grid")))
-        weights_data.append(np.stack(model.weights.tolist()))
+        #activations_data.append(np.stack(model.get_representation("grid")))
+        #weights_data.append(np.stack(model.weights.tolist()))
     
     # Return output values
     return lr_values, loss_values, activations_data, weights_data
@@ -90,7 +98,7 @@ if __name__ == "__main__":
     # train parameters
     input_size = 28*28
     output_size = 10*10
-    batch_size = 10000
+    batch_size = 100
     epochs = 400
 
     points = np.array(
@@ -121,13 +129,20 @@ if __name__ == "__main__":
                 T.Lambda(lambda x: (x - x.min())/(x.max() - x.min()))
                 ]),
         )
-        dataLoader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        
+        #questo non c'era prima, e inoltre batch_size era 10000
+        K = 1000 # enter your length here
+        subsample_train_indices = torch.randperm(len(dataset))[:K]
+        subset = Subset(dataset, indices=subsample_train_indices)
+        dataLoader = DataLoader(subset, batch_size=batch_size, shuffle=True)
+        #prima c'era solo questo:
+        #dataLoader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
         # prepare the model and the optimizer
         som = TopologicalMap(input_size=input_size, output_size=output_size)
 
         # train
-        stm_training(som, dataLoader, epochs=epochs)
+        lr_values, loss_values, _,_=stm_training(som, dataLoader, epochs=epochs)
 
         # save
         torch.save(som, "stm_mnist.pt")
@@ -169,17 +184,28 @@ if __name__ == "__main__":
     ax3.set_xticks([0, 9])
     ax3.set_yticks([0, 9])
     #ax3.set_axis_off()
+    
+    ax3.scatter(points.T[1],points.T[0])
+    y=np.flip(points,axis=1)
+    for i, point in enumerate(y):
+        ax3.text(*(point) + [0.5, -0.5], f'{i}', size=20, ha="center", va="center")
+    '''
+    #sostituito perché dava il plot 3 con punti non corrispondenti
     ax3.scatter(*points.T)
     for i, point in enumerate(points):
         ax3.text(*(point + [0.5, -0.5]), f'{i}', size=20, ha="center", va="center")
         ax3.text(*(point)+ [0.5, -0.5], f'{i}', size=20, ha="center", va="center")
-
+    '''
     # a generated color
     for x in range(10):
         point = torch.rand(1, 2)*10
         num = som.backward(point).detach().numpy().ravel()
-        sc.set_offsets(point.detach().numpy().ravel()*28)
+        #sc.set_offsets(point.detach().numpy().ravel()*28)
+        sc.set_offsets([point[0][1]*28,point[0][0]*28])
         img.set_array(num.reshape(28, 28))
 
         fig.canvas.draw()
         fig.savefig(f"stm_mnist_{x:04d}.png")
+
+    plt.figure()
+    plt.plot(loss_values)

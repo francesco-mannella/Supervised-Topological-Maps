@@ -4,10 +4,10 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader, Subset
-from stm.topological_maps import TopologicalMap, som_loss
+from stm.topological_maps import TopologicalMap, som_loss,som_stm_loss
 import matplotlib
 from matplotlib import gridspec
-matplotlib.use("agg")
+#matplotlib.use("agg")
 
 def som_training(model, data_loader, epochs):
     """Train a self-organizing map.
@@ -54,14 +54,17 @@ def som_training(model, data_loader, epochs):
         # Iterate over data batches
         for i, data in enumerate(data_loader):
             inputs, _ = data
-
+            
+            # zero the parameter gradients
             optimizer.zero_grad()
             
             # Forward pass through the model
-            outputs = model(inputs, std)
+            #outputs = model(inputs, std)
+            outputs = model(inputs)
             
             # Calculate loss
-            sloss =  som_loss(outputs)
+            #sloss =  som_loss(outputs)
+            sloss =  som_stm_loss(som, outputs, std, tags = None)
             loss = lr * sloss
             
             # Backward pass and update gradients
@@ -173,7 +176,10 @@ if __name__ == "__main__":
 
     for i in rdata:
 
-        _ = som(i.reshape(1, -1), .8)
+        #_ = som(i.reshape(1, -1), .8)
+        som.std = 0.8
+        norms2 = som(i.reshape(1, -1))
+        som.bmu = som.find_bmu(norms2)
         m = np.stack(som.get_representation("grid"))
         
         fig, ax = plt.subplots(2, 1, figsize=(4, 8))
