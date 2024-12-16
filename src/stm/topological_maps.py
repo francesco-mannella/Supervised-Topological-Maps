@@ -32,7 +32,7 @@ class RadialBasis:
         elif self.dims == 2:
             self.side = int(math.sqrt(self.size))
             if self.side**2 != self.size:
-                raise "Dinensions must be equal"
+                raise "Dimensions must be equal"
             t =  torch.arange(self.side)
             meshgrids = torch.meshgrid(t, t, indexing="ij")
             self.grid = torch.stack([x.reshape(-1) for x in meshgrids]).T
@@ -54,6 +54,19 @@ class RadialBasis:
         if self.dims == 1:
             x = index.unsqueeze(dim=-1)
             dists = self.grid - x
+        elif  self.dims == 2:
+            if as_point:
+                x = index.unsqueeze(dim=1)
+            else:
+                row = index // self.side
+                col = index % self.side
+                x = torch.stack([row, col]).T
+                x = x.unsqueeze(dim=1)
+            #print(self.grid)
+            dists = torch.norm(
+                    self.grid - x, 
+                    dim=-1)
+        '''
         elif self.dims == 2:
             if as_point:
                 index = index.reshape(-1, 2)
@@ -63,9 +76,11 @@ class RadialBasis:
                 col = index % self.side
             x = torch.stack([row, col]).T
             x = x.unsqueeze(dim=1)
+            #print(self.grid)
             dists = torch.norm(
                     self.grid - x, 
                     dim=-1)
+        '''
         output = torch.exp(-0.5 * (std**-2) * dists**2)
         output /= output.sum(dim=-1).unsqueeze(dim=-1)
 
@@ -106,18 +121,22 @@ class TopologicalMap(torch.nn.Module):
         self.curr_std = self.std_init
         self.bmu = None
         self.side = None if output_dims == 1 else int(math.sqrt(self.output_size))
+        
+    def forward(self,x):
+        
+        diffs = self.weights.unsqueeze(dim=0) - x.unsqueeze(dim=-1)
 
+        # Compute the Euclidean norms of the differences along dimension 1
+        norms = torch.norm(diffs, dim=1)
+
+        # Square the norms to obtain squared distances
+        norms2 = torch.pow(norms, 2)
+        
+        return norms2
+    
+    
+    '''
     def forward(self, x: torch.Tensor, std: float) -> torch.Tensor:
-        """
-        Computes the forward pass of the model.
-
-        Args:
-            x (torch.Tensor): Input tensor of shape (N, C, H, W).
-            std (float): Standard deviation of the Gaussian noise.
-
-        Returns:
-            torch.Tensor: Output tensor of shape (N, C, H, W).
-        """
 
         # Calculate the differences between each weight and input x along a new dimension
         diffs = self.weights.unsqueeze(dim=0) - x.unsqueeze(dim=-1)
@@ -139,6 +158,16 @@ class TopologicalMap(torch.nn.Module):
         self.phi = phi
 
         return norms2*phi
+    '''
+    
+    
+    def find_bmu(self,x):
+        return torch.argmin(x,dim=-1).detach()
+    
+    def SOM_test(self, x):
+        norms2 = self.forward(x)
+        return (self.find_bmu(norms2))
+        
 
     def get_representation(self, rtype="point"):
         """Returns the representation of the best matching unit (BMU) based on
@@ -186,7 +215,25 @@ class TopologicalMap(torch.nn.Module):
         output = torch.matmul(phi, self.weights.T)
         return  output
 
-
+def som_stm_loss(som, norms2, std, tags = None):
+  
+    if tags == None:
+        som.bmu = som.find_bmu(norms2)
+        phi = som.radial(som.bmu, std)
+        som.curr_std = std
+        output = 0.5*norms2*phi
+        return output.mean()
+    
+    else:
+        som.bmu = som.find_bmu(norms2)
+        phi = som.radial(som.bmu, std)
+        rlabels = som.radial(tags, std, as_point=True)
+        som.curr_std = std
+        phi_rlabels = phi*rlabels
+        phi_rlabels = phi_rlabels/phi_rlabels.amax(axis=0)
+        output = 0.5*norms2*phi_rlabels
+        return output.mean()
+        
 def som_loss(output):
     """Computes the loss for reproducing a Self-Organizing Map.
 
@@ -230,7 +277,7 @@ class SOMUpdater:
         learning_rate (float): The learning rate used by the optimizer
         """
 
-        self.optimizer = optim.Adam(
+        self.optimizer = torch.optim.Adam(
             params=stm.parameters(), lr=learning_rate
         )
 
@@ -247,7 +294,7 @@ class STMUpdater:
 
     def __init__(self, stm, learning_rate):
 
-        self.optimizer = optim.Adam(
+        self.optimizer = torch.optim.Adam(
             params=stm.parameters(), lr=learning_rate
         )
 
