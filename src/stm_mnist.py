@@ -11,7 +11,7 @@ import matplotlib
 # matplotlib.use("agg")
 
 
-def stm_training(model, data_loader, epochs):
+def stm_training(model, data_loader, epochs, lr=2.0, final=1e-2, normalized_kernel=True):
     """Train a supervised topological map.
 
     Args:
@@ -27,10 +27,10 @@ def stm_training(model, data_loader, epochs):
     """
 
     # Initialize hyperparameters
-    optimizer_learning_rate = 0.05
-    loss_modulation_final = 1e-2
+    optimizer_learning_rate = lr
+    loss_modulation_final = final
     loss_modulation_gamma = np.exp(np.log(loss_modulation_final) / epochs)
-    neighborhood_std_final = 1e-2
+    neighborhood_std_final = final
     neighborhood_std_gamma = np.exp(np.log(neighborhood_std_final) / epochs)
     neighborhood_std_baseline = 0.7
 
@@ -57,7 +57,7 @@ def stm_training(model, data_loader, epochs):
         )
 
         # Calculate learning rate for current epoch
-        lr = model.std_init * loss_modulation_gamma**epoch
+        lr = loss_modulation_gamma**epoch
 
         # Iterate over data batches
         for i, data in enumerate(data_loader):
@@ -76,7 +76,7 @@ def stm_training(model, data_loader, epochs):
             # calculate loss
             # rlabels = radial(tags, std, as_point=True)
             # stmloss = stm_loss(outputs, rlabels)
-            stmloss = som_stm_loss(som, outputs, std, tags=tags)
+            stmloss = som_stm_loss(som, outputs, std, tags=tags, std_tags=1, normalized_kernel=normalized_kernel)
             loss = lr * stmloss
 
             # backward + optimize
@@ -106,7 +106,8 @@ if __name__ == '__main__':
     input_size = 28 * 28
     output_size = 10 * 10
     batch_size = 10000
-    epochs = 400
+    epochs = 100
+    final = 1e-3
 
     points = (
         np.array(
@@ -142,7 +143,7 @@ if __name__ == '__main__':
             ),
         )
 
-        partial_dataset = True
+        partial_dataset = False 
         if partial_dataset:
             K = 1000
             subsample_train_indices = torch.randperm(len(dataset))[:K]
@@ -160,7 +161,7 @@ if __name__ == '__main__':
 
         # train
         lr_values, loss_values, _, _ = stm_training(
-            som, dataLoader, epochs=epochs
+            som, dataLoader, epochs=epochs, lr=0.09, final=final, normalized_kernel=True,
         )
 
         # save

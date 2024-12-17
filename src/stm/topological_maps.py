@@ -215,7 +215,7 @@ class TopologicalMap(torch.nn.Module):
         output = torch.matmul(phi, self.weights.T)
         return  output
 
-def som_stm_loss(som, norms2, std, tags=None, normalized_kernel=True):
+def som_stm_loss(som, norms2, std, tags=None, std_tags=None, normalized_kernel=True):
     """
     Compute the SOM/STM loss.
 
@@ -232,6 +232,7 @@ def som_stm_loss(som, norms2, std, tags=None, normalized_kernel=True):
     std (float): The standard deviation used for the radial calculation.
     tags (array-like, optional): Labels or tags used for additional radial calculations.
                                 Default is None.
+    std_tags (float):  The standard deviation used for the additional radial calculations centered on tags.
     normalized_kernel(bool, optional): if the kernel is normalized. Default is True.
 
     Returns:
@@ -250,7 +251,8 @@ def som_stm_loss(som, norms2, std, tags=None, normalized_kernel=True):
     else:
         som.bmu = som.find_bmu(norms2)
         phi = som.radial(som.bmu, std)
-        rlabels = som.radial(tags, std, as_point=True)
+        if std_tags is None: std_tags = std
+        rlabels = som.radial(tags, std_tags, as_point=True)
         som.curr_std = std
         phi_rlabels = phi * rlabels
         phi_rlabels = phi_rlabels / phi_rlabels.amax(axis=0)
