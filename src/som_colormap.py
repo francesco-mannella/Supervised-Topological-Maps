@@ -24,15 +24,15 @@ def som_training(model, data_loader, epochs):
     """
     
     # Initialize hyperparameters
-    opt_lr = 0.02
-    final_lr_prop = 0.0000001
-    lr_gamma = np.exp(np.log(final_lr_prop) / epochs)
-    final_std_prop = 0.000001
-    std_gamma = np.exp(np.log(final_std_prop) / epochs)
-    std_baseline = 1
+    optimizer_learning_rate = 0.02
+    loss_modulation_final = 0.0000001
+    loss_modulation_gamma = np.exp(np.log(loss_modulation_final) / epochs)
+    neighborhood_std_final = 0.000001
+    neighborhood_std_gamma = np.exp(np.log(neighborhood_std_final) / epochs)
+    neighborhood_std_baseline = 1
     
     # Initialize optimizer for model parameters
-    optimizer = torch.optim.Adam(model.parameters(), lr=opt_lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=optimizer_learning_rate)
     
     # Initialize lists to store output values
     lr_values = []
@@ -45,10 +45,10 @@ def som_training(model, data_loader, epochs):
         running_loss = 0.0
         
         # Calculate standard deviation for current epoch
-        std = std_baseline + model.std_init * std_gamma**epoch
+        std = neighborhood_std_baseline + model.std_init * neighborhood_std_gamma**epoch
         
         # Calculate learning rate for current epoch
-        lr = model.std_init * lr_gamma**epoch
+        lr = model.std_init * loss_modulation_gamma**epoch
 
         # Iterate over data batches
         for i, data in enumerate(data_loader):

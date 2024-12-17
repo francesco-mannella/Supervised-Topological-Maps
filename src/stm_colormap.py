@@ -22,14 +22,14 @@ def stm_training(model, data_loader, epochs):
     """
     
     # Initialize hyperparameters
-    opt_lr = 0.2
-    final_lr_prop = 1e-8
-    lr_gamma = np.exp(np.log(final_lr_prop)/epochs)
-    final_std_prop = 1e-8
-    std_gamma = np.exp(np.log(final_std_prop)/epochs)
-    std_baseline = 0.6
+    optimizer_learning_rate = 0.2
+    loss_modulation_final = 1e-8
+    loss_modulation_gamma = np.exp(np.log(loss_modulation_final)/epochs)
+    neighborhood_std_final = 1e-8
+    neighborhood_std_gamma = np.exp(np.log(neighborhood_std_final)/epochs)
+    neighborhood_std_baseline = 0.6
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=opt_lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=optimizer_learning_rate)
     
     # Initialize lists to store output values
     lr_values = []
@@ -43,8 +43,8 @@ def stm_training(model, data_loader, epochs):
     for epoch in range(epochs):
         running_loss = 0.0
 
-        std = std_baseline + model.std_init*std_gamma**epoch
-        lr = model.std_init*lr_gamma**epoch 
+        std = neighborhood_std_baseline + model.std_init*neighborhood_std_gamma**epoch
+        lr = model.std_init*loss_modulation_gamma**epoch 
 
         for i, data in enumerate(data_loader):
 

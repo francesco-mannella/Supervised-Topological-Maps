@@ -215,49 +215,47 @@ class TopologicalMap(torch.nn.Module):
         output = torch.matmul(phi, self.weights.T)
         return  output
 
-def som_stm_loss(som, norms2, std, tags = None):
-  
-    if tags == None:
+def som_stm_loss(som, norms2, std, tags=None, normalized_kernel=True):
+    """
+    Compute the SOM/STM loss.
+
+    This function calculates the loss for either a Self-Organizing Map (SOM) or a
+    Supervised Topological Map (STM). When tags are not provided (indicating a
+    SOM), the loss is computed using only the input norms2 and standard deviation
+    (std). If tags are present (indicating an STM), they are included in the loss
+    calculation to account for supervised learning elements.
+
+    Parameters:
+    som (object): The SOM object which contains methods to find BMU (Best Matching Unit)
+                  and compute radial values.
+    norms2 (array-like): The squared norm of some input data.
+    std (float): The standard deviation used for the radial calculation.
+    tags (array-like, optional): Labels or tags used for additional radial calculations.
+                                Default is None.
+    normalized_kernel(bool, optional): if the kernel is normalized. Default is True.
+
+    Returns:
+    float: The mean value of the computed loss.
+
+    """
+    # If tags are not provided, calculate loss without tags
+    if tags is None:
         som.bmu = som.find_bmu(norms2)
         phi = som.radial(som.bmu, std)
         som.curr_std = std
-        output = 0.5*norms2*phi
+        output = 0.5 * norms2 * phi
         return output.mean()
     
+    # If tags are provided, incorporate them into the loss calculation
     else:
         som.bmu = som.find_bmu(norms2)
         phi = som.radial(som.bmu, std)
         rlabels = som.radial(tags, std, as_point=True)
         som.curr_std = std
-        phi_rlabels = phi*rlabels
-        phi_rlabels = phi_rlabels/phi_rlabels.amax(axis=0)
-        output = 0.5*norms2*phi_rlabels
+        phi_rlabels = phi * rlabels
+        phi_rlabels = phi_rlabels / phi_rlabels.amax(axis=0)
+        output = 0.5 * norms2 * phi_rlabels
         return output.mean()
-        
-def som_loss(output):
-    """Computes the loss for reproducing a Self-Organizing Map.
-
-    Args:
-        output (array): Output of the SOM network.
-
-    Returns:
-        float: Loss value.
-    """
-    return 0.5*output.mean()
-
-def stm_loss(output, target):
-    """Calculates the loss for reproducing a Supervised Topological Map.
-
-    Args:
-        output (torch.Tensor): Output of the model.
-        target (torch.Tensor): Target of the model.
-
-    Returns:
-        torch.Tensor: Loss value.
-    """
-    filtered = output * target
-    return 0.5*filtered.mean()
-
 
 class SOMUpdater:
     """
@@ -281,11 +279,11 @@ class SOMUpdater:
             params=stm.parameters(), lr=learning_rate
         )
 
-        self.loss = som_loss
+        self.loss = somi_stm_loss
 
-    def __call__(self, output,  learning_modulation):
+    def __call__(self, output, std, learning_modulation):
     
-        loss = learning_modulation * self.loss(output)        
+        loss = learning_modulation * self.loss(output, std)        
         loss.backward(retain_graph=True)
         self.optimizer.step()
         self.optimizer.zero_grad()
@@ -298,11 +296,11 @@ class STMUpdater:
             params=stm.parameters(), lr=learning_rate
         )
 
-        self.loss = stm_loss
+        self.loss = som_stm_loss
 
-    def __call__(self, output, target, learning_modulation):
+    def __call__(self, output, std, target, learning_modulation):
     
-        loss = learning_modulation * self.loss(output, target)        
+        loss = learning_modulation * self.loss(output, std, target)        
         loss.backward(retain_graph=True)
         self.optimizer.step()
         self.optimizer.zero_grad()
