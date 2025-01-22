@@ -51,7 +51,7 @@ def stm_training(model, data_loader, epochs, lr=2.0, final=1e-2, normalized_kern
         running_loss = 0.0
 
         # Calculate standard deviation for current epoch
-        std = (
+        neighborhood_std = (
             neighborhood_std_baseline
             + model.std_init * neighborhood_std_gamma**epoch
         )
@@ -70,13 +70,13 @@ def stm_training(model, data_loader, epochs, lr=2.0, final=1e-2, normalized_kern
             # forward pass through the model
             outputs = model(inputs)
             # loss depends also on radial grids centered on label points
-            tags = torch.tensor(points[labels]).detach()
-            # tags = torch.tensor(points[labels])
+            anchors = torch.tensor(points[labels]).detach()
+            # anchors = torch.tensor(points[labels])
 
             # calculate loss
-            # rlabels = radial(tags, std, as_point=True)
+            # rlabels = radial(anchors, neighborhood_std, as_point=True)
             # stmloss = stm_loss(outputs, rlabels)
-            stmloss = som_stm_loss(som, outputs, std, tags=tags, std_tags=1, normalized_kernel=normalized_kernel)
+            stmloss = som_stm_loss(som, outputs, neighborhood_std, anchors=anchors, neighborhood_std_anchors=1, normalized_kernel=normalized_kernel)
             loss = lr * stmloss
 
             # backward + optimize

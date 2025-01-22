@@ -63,23 +63,8 @@ class RadialBasis:
                 col = index % self.side
                 x = torch.stack([row, col]).T
                 x = x.unsqueeze(dim=1)
-            # print(self.grid)
             dists = torch.norm(self.grid - x, dim=-1)
-        """
-        elif self.dims == 2:
-            if as_point:
-                index = index.reshape(-1, 2)
-                col, row = index[:, 0], index[:, 1]
-            else:
-                row = index // self.side
-                col = index % self.side
-            x = torch.stack([row, col]).T
-            x = x.unsqueeze(dim=1)
-            #print(self.grid)
-            dists = torch.norm(
-                    self.grid - x, 
-                    dim=-1)
-        """
+
         output = torch.exp(-0.5 * (std**-2) * dists**2)
         output /= output.sum(dim=-1).unsqueeze(dim=-1)
 
@@ -166,14 +151,14 @@ class TopologicalMap(torch.nn.Module):
         return torch.argmin(x, dim=-1).detach()
 
 
-    def get_representation(self, x, rtype='point', std=None):
+    def get_representation(self, x, rtype='point', neighborhood_std=None):
         """
         Generates the representation of the Best Matching Unit (BMU) based on the specified type requested.
 
         Args:
             x (torch.Tensor): Input tensor.
             rtype (str, optional): Type of the representation. Supported types are 'point' (default) and 'grid'.
-            std (float, optional): Standard deviation for the neighborhood function. Defaults to current std.
+            neighborhood_std (float, optional): Standard deviation for the neighborhood function. Defaults to current neighborhood_std.
 
         Returns:
             torch.Tensor or None: BMU representation based on the specified type; None if BMU is unavailable.
@@ -191,28 +176,28 @@ class TopologicalMap(torch.nn.Module):
                     return torch.stack([row, col]).T.float()
 
             elif rtype == 'grid':
-                if std is None:
-                    std = self.curr_std
-                phi = self.radial(self.bmu, std)
+                if neighborhood_std is None:
+                    neighborhood_std = self.curr_neighborhood_std
+                phi = self.radial(self.bmu, neighborhood_std)
                 return phi
         else:
             return None
 
-    def backward(self, point, std=None):
+    def backward(self, point, neighborhood_std=None):
         """
         Executes the backward pass for a specified point.
 
         Args:
             point (int): Target point for the backward pass.
-            std (float, optional): Standard deviation for the radial basis function. Defaults to current std.
+            neighborhood_std (float, optional): Standard deviation for the radial basis function. Defaults to current neighborhood_std.
 
         Returns:
             torch.Tensor: Result of the backward pass for the specified point.
         """
 
-        if std is None:
-            std = self.curr_std
-        phi = self.radial(point, std, as_point=True)
+        if neighborhood_std is None:
+            neighborhood_std = self.curr_neighborhood_std
+        phi = self.radial(point, neighborhood_std, as_point=True)
         output = torch.matmul(phi, self.weights.T)
         return output
 
@@ -224,54 +209,55 @@ class Updater:
     model (torch model): The SOM or STM model to be updated.
     learning_rate (float): The learning rate used by the optimizer.
     mode (str): The type of update ('som' or 'stm').
-    normalized_kernel (bool, optional): If the kernel is normalized. Default is True.
+    kernel_function (callable, optional): function defining the kernel. 
+        default is lambda phi: phi            if mode is som
+                   lambda phi, psi: phi*psi   if mode is stm
     """
 
     def __init__(self, model, learning_rate, mode='som', normalized_kernel=True):
         self.model = model
         self.optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate)
         self.mode = mode
-        self.normalized_kernel = normalized_kernel
+        if self.mode == "som":
+            self.kernel_function = lambda phi: phi
+        elif self.mode == "stm": 
+            self.kernel_function = lambda phi*psi: phi*psi
 
-    def loss(self, norms2, std, tags=None, std_tags=None):
+    def loss(self, norms2, neighborhood_std, anchors=None, neighborhood_std_anchors=None):
         """
         Compute the SOM/STM loss.
 
         Parameters:
         norms2 (array-like): The squared norm of some input data.
-        std (float): The standard deviation for radial calculation.
-        tags (array-like, optional): Labels or tags for additional calculations. Default is None.
-        std_tags (float, optional): The standard deviation for tags calculations. Default is std.
+        neighborhood_std (float): The standard deviation for neighborhood radial calculation.
+        anchors (array-like, optional): Labels or anchors for neighborhood modulation. Default is None.
+        neighborhood_std_anchors (float, optional): The standard deviation for anchors  neighborhood modulation. Default is neighborhood_std.
 
         Returns:
         float: The mean value of the computed loss.
         """
-        # If tags are not provided, calculate loss without tags
-        if tags is None:
+        # If anchors are not provided, calculate loss without anchors
+        if anchors is None:
             self.model.bmu = self.model.find_bmu(norms2)
-            phi = self.model.radial(self.model.bmu, std)
-            self.model.curr_std = std
-            output = 0.5 * norms2 * phi
-        # If tags are provided, incorporate them into the loss calculation
+            phi = self.model.radial(self.model.bmu, neighborhood_std)
+            self.model.curr_neighborhood_std = neighborhood_std
+            output = 0.5 * norms2 * self.kernel_function(phi)
+        # If anchors are provided, incorporate them into the loss calculation
         else:
+            if neighborhood_std_tags is None: neighborhood_std_tags = neighborhood_std
+            self.model.curr_neighborhood_std = neighborhood_std
             self.model.bmu = self.model.find_bmu(norms2)
-            phi = self.model.radial(self.model.bmu, std)
-            if std_tags is None:
-                std_tags = std
-            rlabels = self.model.radial(tags, std_tags, as_point=True)
-            self.model.curr_std = std
-            phi_rlabels = phi * rlabels
-            if self.normalized_kernel:
-                phi_rlabels = phi_rlabels / phi_rlabels.amax(axis=0)
-            output = 0.5 * norms2 * phi_rlabels
+            phi = self.model.radial(self.model.bmu, neighborhood_std)
+            psi = self.model.radial(anchors, std_anchors, as_point=True)
+            output = 0.5 * norms2 * self.kernel_function(phi, psi)
 
         return output.mean()
 
-    def __call__(self, output, std, learning_modulation, target=None, target_std=None):
+    def __call__(self, output, neighborhood_std, learning_modulation, target=None, target_neighborhood_std=None):
         if self.mode == 'som':
-            loss = self.loss(output, std)
+            loss = self.loss(output, neighborhood_std)
         elif self.mode == 'stm':
-            loss = self.loss(output, std, target, target_std)
+            loss = self.loss(output, neighborhood_std, target, target_neighborhood_std)
         else:
             raise ValueError("Invalid mode. Use 'som' or 'stm'.")
 

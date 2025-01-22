@@ -45,7 +45,7 @@ def som_training(model, data_loader, epochs):
         running_loss = 0.0
         
         # Calculate standard deviation for current epoch
-        std = neighborhood_std_baseline + model.std_init * neighborhood_std_gamma**epoch
+        neighborhood_std = neighborhood_neighborhood_std_baseline + model.neighborhood_std_init * neighborhood_neighborhood_std_gamma**epoch
         
         # Calculate learning rate for current epoch
         lr = model.std_init * loss_modulation_gamma**epoch
@@ -57,7 +57,7 @@ def som_training(model, data_loader, epochs):
             optimizer.zero_grad()
             
             # Forward pass through the model
-            outputs = model(inputs, std)
+            outputs = model(inputs, neighborhood_std)
             
             # Calculate loss
             sloss =  som_loss(outputs)
@@ -177,8 +177,8 @@ def plot_lr(ax, lrs, epochs):
     # Set the x-axis limits
     ax.set_xlim(-epochs * 0.1, epochs * 1.1)
     # Set the y-axis limits
-    std = 1.1
-    ax.set_ylim(-std * 0.1, std * 1.1)
+    neighborhood_std = 1.1
+    ax.set_ylim(-neighborhood_std * 0.1, neighborhood_std * 1.1)
 
 
 def hinton(matrix, max_weight=None, ax=None):

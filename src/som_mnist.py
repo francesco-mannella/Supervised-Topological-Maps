@@ -50,7 +50,7 @@ def som_training(model, data_loader, epochs):
         running_loss = 0.0
 
         # Calculate standard deviation for current epoch
-        std = (
+        neighborhood_std = (
             neighborhood_std_baseline
             + model.std_init * neighborhood_std_gamma**epoch
         )
@@ -66,12 +66,12 @@ def som_training(model, data_loader, epochs):
             optimizer.zero_grad()
 
             # Forward pass through the model
-            # outputs = model(inputs, std)
+            # outputs = model(inputs, neighborhood_std)
             outputs = model(inputs)
 
             # Calculate loss
             # sloss =  som_loss(outputs)
-            sloss = som_stm_loss(som, outputs, std, tags=None)
+            sloss = som_stm_loss(som, outputs, neighborhood_std, anchors=None)
             loss = lr * sloss
 
             # Backward pass and update gradients
@@ -183,7 +183,7 @@ if __name__ == '__main__':
     for i in rdata:
 
         # _ = som(i.reshape(1, -1), .8)
-        som.std = 0.8
+        som.neighborhood_std = 0.8
         norms2 = som(i.reshape(1, -1))
         som.bmu = som.find_bmu(norms2)
         m = np.stack(som.get_representation('grid'))

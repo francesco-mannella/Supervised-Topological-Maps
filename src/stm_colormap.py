@@ -43,7 +43,7 @@ def stm_training(model, data_loader, epochs):
     for epoch in range(epochs):
         running_loss = 0.0
 
-        std = neighborhood_std_baseline + model.std_init*neighborhood_std_gamma**epoch
+        neighborhood_std = neighborhood_neighborhood_std_baseline + model.neighborhood_std_init*neighborhood_neighborhood_std_gamma**epoch
         lr = model.std_init*loss_modulation_gamma**epoch 
 
         for i, data in enumerate(data_loader):
@@ -54,7 +54,7 @@ def stm_training(model, data_loader, epochs):
             optimizer.zero_grad()
 
             # forward
-            outputs = model(inputs, std)
+            outputs = model(inputs, neighborhood_std)
             # loss depends also on radial grids centered on label points
             rlabels = radial(labels, 0.1*model.std_init, as_point=True )
             stmloss = stm_loss(outputs, rlabels)
