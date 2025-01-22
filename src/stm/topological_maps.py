@@ -88,21 +88,22 @@ class RadialBasis:
 
 class TopologicalMap(torch.nn.Module):
     """
-    A neural network designed to represent a topological map. The nodes are
-    connected in a way that reflects the topology of the data, allowing the network
-    to recognize patterns and make decisions based on those patterns.
+    A neural network module that represents a topological map. This map models data topology
+    through connected nodes
     """
 
     def __init__(
         self, input_size, output_size, output_dims=2, parameters=None
     ):
         """
+        Initializes the TopologicalMap with specified input and output dimensions and optionally custom parameters.
 
         Args:
-            input_size (int): The number of inputs for the network.
-            output_size (int): The number of outputs for the network.
-            output_dims (int, optional): The number of dimensions for the output. Defaults to 2.
-            parameters (nparray): The array of initial weights. default is None
+            input_size (int): Number of inputs to the network.
+            output_size (int): Number of outputs from the network.
+            output_dims (int, optional): Dimensionality of the output space. Defaults to 2.
+            parameters (numpy.ndarray, optional): Initial weight parameters; defaults to None, which 
+                                                  initializes weights with Xavier normalization.
         """
 
         super(TopologicalMap, self).__init__()
@@ -131,6 +132,16 @@ class TopologicalMap(torch.nn.Module):
         )
 
     def forward(self, x):
+        """
+        Computes the forward pass by calculating squared Euclidean distances 
+        between input data and the network's weights.
+
+        Args:
+            x (torch.Tensor): Input tensor.
+
+        Returns:
+            torch.Tensor: Squared Euclidean distances for each weight vector.
+        """
 
         diffs = self.weights.unsqueeze(dim=0) - x.unsqueeze(dim=-1)
 
@@ -143,25 +154,29 @@ class TopologicalMap(torch.nn.Module):
         return norms2
 
     def find_bmu(self, x):
-        return torch.argmin(x, dim=-1).detach()
-
-    def SOM_test(self, x):
-        norms2 = self.forward(x)
-        return self.find_bmu(norms2)
-
-    def get_representation(self, x, rtype='point', std=None):
-        """Returns the representation of the best matching unit (BMU) based on
-        the specified representation type.
+        """
+        Identifies the index of the Best Matching Unit (BMU) for a given input.
 
         Args:
-            x: 
-            rtype (str, optional): The representation type to be returned. Valid
-                values are: "point" (default) and "grid".
-            std (float): The standard deviation of the neighborhood.
+            x (torch.Tensor): Input tensor.
 
         Returns:
-            torch.Tensor or None: The representation of the BMU. Returns
-            None if the BMU is not available.
+            torch.Tensor: Index of the BMU.
+        """
+        return torch.argmin(x, dim=-1).detach()
+
+
+    def get_representation(self, x, rtype='point', std=None):
+        """
+        Generates the representation of the Best Matching Unit (BMU) based on the specified type requested.
+
+        Args:
+            x (torch.Tensor): Input tensor.
+            rtype (str, optional): Type of the representation. Supported types are 'point' (default) and 'grid'.
+            std (float, optional): Standard deviation for the neighborhood function. Defaults to current std.
+
+        Returns:
+            torch.Tensor or None: BMU representation based on the specified type; None if BMU is unavailable.
         """
 
         self.bmu = self.find_bmu(x)
@@ -185,14 +200,14 @@ class TopologicalMap(torch.nn.Module):
 
     def backward(self, point, std=None):
         """
-        Computes the backward pass of the given point.
+        Executes the backward pass for a specified point.
 
         Args:
-            point (int): The point to compute the backward pass for.
-            std (float, optional): The standard deviation to use for the backward pass. Defaults to None.
+            point (int): Target point for the backward pass.
+            std (float, optional): Standard deviation for the radial basis function. Defaults to current std.
 
         Returns:
-            float: The result of the backward pass.
+            torch.Tensor: Result of the backward pass for the specified point.
         """
 
         if std is None:
@@ -201,116 +216,66 @@ class TopologicalMap(torch.nn.Module):
         output = torch.matmul(phi, self.weights.T)
         return output
 
-
-def som_stm_loss(
-    som, norms2, std, tags=None, std_tags=None, normalized_kernel=True
-):
+class Updater:
     """
-    Compute the SOM/STM loss.
-
-    This function calculates the loss for either a Self-Organizing Map (SOM) or a
-    Supervised Topological Map (STM). When tags are not provided (indicating a
-    SOM), the loss is computed using only the input norms2 and standard deviation
-    (std). If tags are present (indicating an STM), they are included in the loss
-    calculation to account for supervised learning elements.
+    Class for updating a SOM or STM model.
 
     Parameters:
-    som (object): The SOM object which contains methods to find BMU (Best Matching Unit)
-                  and compute radial values.
-    norms2 (array-like): The squared norm of some input data.
-    std (float): The standard deviation used for the radial calculation.
-    tags (array-like, optional): Labels or tags used for additional radial calculations.
-                                Default is None.
-    std_tags (float):  The standard deviation used for the additional radial calculations centered on tags.
-    normalized_kernel(bool, optional): if the kernel is normalized. Default is True.
-
-    Returns:
-    float: The mean value of the computed loss.
-
-    """
-    # If tags are not provided, calculate loss without tags
-    if tags is None:
-        som.bmu = som.find_bmu(norms2)
-        phi = som.radial(som.bmu, std)
-        som.curr_std = std
-        output = 0.5 * norms2 * phi
-
-    # If tags are provided, incorporate them into the loss calculation
-    else:
-        som.bmu = som.find_bmu(norms2)
-        phi = som.radial(som.bmu, std)
-        if std_tags is None:
-            std_tags = std
-        rlabels = som.radial(tags, std_tags, as_point=True)
-        som.curr_std = std
-        phi_rlabels = phi * rlabels
-        if normalized_kernel == True: 
-            phi_rlabels = phi_rlabels / phi_rlabels.amax(axis=0)
-        output = 0.5 * norms2 * phi_rlabels
-
-    return output
-
-
-class SOMUpdater:
-    """
-    Class for updating a Supervised Topological Map (STM) model.
-
-    Parameters:
-    stm (torch model): The STM model to be updated
-    learning_rate (float): The learning rate used by the optimizer
+    model (torch model): The SOM or STM model to be updated.
+    learning_rate (float): The learning rate used by the optimizer.
+    mode (str): The type of update ('som' or 'stm').
+    normalized_kernel (bool, optional): If the kernel is normalized. Default is True.
     """
 
-    def __init__(self, som, learning_rate):
-        """
-        Initializes the STMUpdater object with the provided STM model and learning rate.
-
-        Args:
-        som (torch model): The SOM model to be updated
-        learning_rate (float): The learning rate used by the optimizer
-        """
-
-        self.som = som
-
-        self.optimizer = torch.optim.Adam(
-            params=stm.parameters(), lr=learning_rate
-        )
-
-        self.loss = somi_stm_loss
-
-    def __call__(self, som, output, std, learning_modulation):
-
-        loss = learning_modulation * self.loss(output, std)
-        loss.backward(retain_graph=True)
-        self.optimizer.step()
-        self.optimizer.zero_grad()
-
-
-class STMUpdater:
-    def __init__(self, stm, learning_rate, normalized_kernel=True):
-
-        self.stm = stm
-
-        self.optimizer = torch.optim.Adam(
-            params=stm.parameters(), lr=learning_rate
-        )
-
-        self.loss = som_stm_loss
+    def __init__(self, model, learning_rate, mode='som', normalized_kernel=True):
+        self.model = model
+        self.optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate)
+        self.mode = mode
         self.normalized_kernel = normalized_kernel
 
-    def __call__(
-        self, output, std, target, learning_modulation, target_std=None
-    ):
+    def loss(self, norms2, std, tags=None, std_tags=None):
+        """
+        Compute the SOM/STM loss.
 
-        loss = self.loss(
-                self.stm,
-                output,
-                std,
-                target,
-                target_std,
-                normalized_kernel=self.normalized_kernel,
-            )
+        Parameters:
+        norms2 (array-like): The squared norm of some input data.
+        std (float): The standard deviation for radial calculation.
+        tags (array-like, optional): Labels or tags for additional calculations. Default is None.
+        std_tags (float, optional): The standard deviation for tags calculations. Default is std.
+
+        Returns:
+        float: The mean value of the computed loss.
+        """
+        # If tags are not provided, calculate loss without tags
+        if tags is None:
+            self.model.bmu = self.model.find_bmu(norms2)
+            phi = self.model.radial(self.model.bmu, std)
+            self.model.curr_std = std
+            output = 0.5 * norms2 * phi
+        # If tags are provided, incorporate them into the loss calculation
+        else:
+            self.model.bmu = self.model.find_bmu(norms2)
+            phi = self.model.radial(self.model.bmu, std)
+            if std_tags is None:
+                std_tags = std
+            rlabels = self.model.radial(tags, std_tags, as_point=True)
+            self.model.curr_std = std
+            phi_rlabels = phi * rlabels
+            if self.normalized_kernel:
+                phi_rlabels = phi_rlabels / phi_rlabels.amax(axis=0)
+            output = 0.5 * norms2 * phi_rlabels
+
+        return output.mean()
+
+    def __call__(self, output, std, learning_modulation, target=None, target_std=None):
+        if self.mode == 'som':
+            loss = self.loss(output, std)
+        elif self.mode == 'stm':
+            loss = self.loss(output, std, target, target_std)
+        else:
+            raise ValueError("Invalid mode. Use 'som' or 'stm'.")
+
         loss = learning_modulation * loss
-        loss = loss.mean()
         loss.backward(retain_graph=True)
         self.optimizer.step()
         self.optimizer.zero_grad()
