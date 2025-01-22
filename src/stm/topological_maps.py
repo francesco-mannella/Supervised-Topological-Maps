@@ -221,7 +221,7 @@ class Updater:
         if self.mode == "som":
             self.kernel_function = lambda phi: phi
         elif self.mode == "stm": 
-            self.kernel_function = lambda phi*psi: phi*psi
+            self.kernel_function = lambda phi,psi: phi*psi
 
     def loss(self, norms2, neighborhood_std, anchors=None, neighborhood_std_anchors=None):
         """
@@ -255,13 +255,15 @@ class Updater:
 
     def __call__(self, output, neighborhood_std, learning_modulation, target=None, target_neighborhood_std=None):
         if self.mode == 'som':
-            loss = self.loss(output, neighborhood_std)
+            unmodulated_loss = self.loss(output, neighborhood_std)
         elif self.mode == 'stm':
-            loss = self.loss(output, neighborhood_std, target, target_neighborhood_std)
+            unmodulated_loss = self.loss(output, neighborhood_std, target, target_neighborhood_std)
         else:
             raise ValueError("Invalid mode. Use 'som' or 'stm'.")
 
-        loss = learning_modulation * loss
+        loss = learning_modulation * unmodulated_loss
         loss.backward(retain_graph=True)
         self.optimizer.step()
         self.optimizer.zero_grad()
+
+        return loss, unmodulated_loss 
