@@ -208,14 +208,17 @@ class Updater:
                    lambda phi, psi: phi*psi   if mode is stm
     """
 
-    def __init__(self, model, learning_rate, mode="som", normalized_kernel=True):
+    def __init__(self, model, learning_rate, mode="som", kernel_function=None):
         self.model = model
         self.optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate)
         self.mode = mode
-        if self.mode == "som":
-            self.kernel_function = lambda phi: phi
-        elif self.mode == "stm":
-            self.kernel_function = lambda phi, psi: phi * psi
+        if kernel_function is None:
+            if self.mode == "som":
+                self.kernel_function = lambda phi: phi
+            elif self.mode == "stm":
+                self.kernel_function = lambda phi, psi: phi * psi
+        else:
+            self.kernel_function = kernel_function
 
     def loss(
         self, norms2, neighborhood_std, anchors=None, neighborhood_std_anchors=None
