@@ -18,7 +18,7 @@ def som_training(model, data_loader, epochs):
         epochs (int): The number of epochs to train the model for.
 
     Returns:
-        lr_values (list): List of learning rate values for each epoch.
+        loss_modulation_values (list): List of learning rate values for each epoch.
         loss_values (list): List of loss values for each epoch.
         activations_data (list): List of activation data for each epoch.
         weights_data (list): List of weight data for each epoch.
@@ -31,7 +31,7 @@ def som_training(model, data_loader, epochs):
     loss_modulation_scale = 1
     neighborhood_std_final = 0.000001
     neighborhood_std_gamma = np.exp(np.log(neighborhood_std_final) / epochs)
-    neighborhood_std_baseline = 1
+    neighborhood_std_baseline = 0.5*np.sqrt(2)
     neighborhood_std_scale = model.side
 
     # Initialize som updater 
@@ -42,7 +42,7 @@ def som_training(model, data_loader, epochs):
 
 
     # Initialize lists to store output values
-    modulation_rate_values = []
+    loss_modulation_values = []
     loss_values = []
     activations_data = []
     weights_data = []
@@ -58,7 +58,7 @@ def som_training(model, data_loader, epochs):
         )
 
         # Calculate learning rate for current epoch
-        modulation_rate = loss_modulation_scale * loss_modulation_gamma**epoch
+        loss_modulation = loss_modulation_scale * loss_modulation_gamma**epoch
 
         # Iterate over data batches
         for i, data in enumerate(data_loader):
@@ -68,7 +68,7 @@ def som_training(model, data_loader, epochs):
             outputs = model(inputs)
 
             # update
-            _, loss = updater(outputs, neighborhood_std, modulation_rate )
+            _, loss = updater(outputs, neighborhood_std, loss_modulation )
 
             running_loss += loss.item()
 
@@ -76,22 +76,22 @@ def som_training(model, data_loader, epochs):
             print(f"[{epoch}, {i:5d}] loss: {running_loss:.5f}")
 
         # Append values to corresponding lists
-        modulation_rate_values.append(modulation_rate)
+        loss_modulation_values.append(loss_modulation)
         loss_values.append(running_loss)
         activations_data.append(np.stack(model.get_representation(outputs, "grid")))
         weights_data.append(np.stack(model.weights.tolist()))
 
     # Return output values
-    return modulation_rate_values, loss_values, activations_data, weights_data
+    return loss_modulation_values, loss_values, activations_data, weights_data
 
 
 def plot_training_results(
-    lr_values, loss_values, activations_data, weights_data, epochs
+    loss_modulation_values, loss_values, activations_data, weights_data, epochs
 ):
     """Plot the training results.
 
     Args:
-        lr_values (list): List of learning rate values over epochs.
+        loss_modulation_values (list): List of learning rate values over epochs.
         loss_values (list): List of loss values over epochs.
         activations_data (list): List of activation data snapshots over epochs.
         weights_data (list): List of weight data snapshots over epochs.
@@ -105,7 +105,7 @@ def plot_training_results(
     # Create video managers for each plot
     vm = mkvideo.vidManager(fig1, "som", ".")
     vmw = mkvideo.vidManager(fig2, "som_weights", ".")
-    vmlr = mkvideo.vidManager(fig3, "som_lr", ".")
+    vmloss_modulation = mkvideo.vidManager(fig3, "som_loss_modulation", ".")
 
     # Iterate over each epoch
     for epoch in range(epochs):
@@ -114,16 +114,16 @@ def plot_training_results(
         # Plot the weights
         plot_weights(ax2, weights_data[epoch])
         # Plot the learning rate
-        plot_lr(ax3, lr_values[: epoch + 1], epochs)
+        plot_loss_modulation(ax3, loss_modulation_values[: epoch + 1], epochs)
         # Save each frame of the plots
         vm.save_frame()
         vmw.save_frame()
-        vmlr.save_frame()
+        vmloss_modulation.save_frame()
 
     # Create videos from the saved frames
     vm.mk_video()
     vmw.mk_video()
-    vmlr.mk_video()
+    vmloss_modulation.mk_video()
 
 
 def plot_activations(ax, r):
@@ -170,24 +170,24 @@ def plot_weights(ax, w):
     ax.set_axis_off()
 
 
-def plot_lr(ax, lrs, epochs):
+def plot_loss_modulation(ax, loss_modulations, epochs):
     """Plot the learning rate.
 
     Args:
         ax (matplotlib.axes.Axes): The axes to plot on.
-        lrs (list): The learning rate values.
+        loss_modulations (list): The learning rate values.
         epochs (int): The number of epochs.
     """
     # Clear the plot
     ax.cla()
     # Initialize an array for the learning rate values
-    tlrs = np.zeros(epochs)
+    tloss_modulations = np.zeros(epochs)
     # Assign the learning rate values to the array
-    tlrs[: len(lrs)] = np.array(lrs) / 10
-    tlrs[len(lrs) :] = np.nan
+    tloss_modulations[: len(loss_modulations)] = np.array(loss_modulations) / 10
+    tloss_modulations[len(loss_modulations) :] = np.nan
     # Plot the learning rate values
-    ax.plot(range(epochs), tlrs, c="black")
-    ax.scatter(len(lrs) - 1, tlrs[len(lrs) - 1], s=40, c="black")
+    ax.plot(range(epochs), tloss_modulations, c="black")
+    ax.scatter(len(loss_modulations) - 1, tloss_modulations[len(loss_modulations) - 1], s=40, c="black")
     # Set the x-axis limits
     ax.set_xlim(-epochs * 0.1, epochs * 1.1)
     # Set the y-axis limits
@@ -314,5 +314,5 @@ if __name__ == "__main__":
     plot_weights_and_colors(som)
 
     # Plot training results
-    lr_values, loss_values, activations_data, weights_data = stored_data
-    plot_training_results(lr_values, loss_values, activations_data, weights_data, epochs)
+    loss_modulation_values, loss_values, activations_data, weights_data = stored_data
+    plot_training_results(loss_modulation_values, loss_values, activations_data, weights_data, epochs)

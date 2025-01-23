@@ -5,7 +5,7 @@ import numpy as np
 
 class DimensionalityError(Exception):
     def __str__(self):
-        return 'Dimensionality of the output must be 1D or 2D.'
+        return "Dimensionality of the output must be 1D or 2D."
 
 
 class RadialBasis:
@@ -33,9 +33,9 @@ class RadialBasis:
         elif self.dims == 2:
             self.side = int(math.sqrt(self.size))
             if self.side**2 != self.size:
-                raise 'Dimensions must be equal'
+                raise "Dimensions must be equal"
             t = torch.arange(self.side)
-            meshgrids = torch.meshgrid(t, t, indexing='ij')
+            meshgrids = torch.meshgrid(t, t, indexing="ij")
             self.grid = torch.stack([x.reshape(-1) for x in meshgrids]).T
         else:
             raise DimensionalityError()
@@ -77,9 +77,7 @@ class TopologicalMap(torch.nn.Module):
     through connected nodes
     """
 
-    def __init__(
-        self, input_size, output_size, output_dims=2, parameters=None
-    ):
+    def __init__(self, input_size, output_size, output_dims=2, parameters=None):
         """
         Initializes the TopologicalMap with specified input and output dimensions and optionally custom parameters.
 
@@ -87,7 +85,7 @@ class TopologicalMap(torch.nn.Module):
             input_size (int): Number of inputs to the network.
             output_size (int): Number of outputs from the network.
             output_dims (int, optional): Dimensionality of the output space. Defaults to 2.
-            parameters (numpy.ndarray, optional): Initial weight parameters; defaults to None, which 
+            parameters (numpy.ndarray, optional): Initial weight parameters; defaults to None, which
                                                   initializes weights with Xavier normalization.
         """
 
@@ -106,19 +104,15 @@ class TopologicalMap(torch.nn.Module):
         self.output_dims = output_dims
         self.radial = RadialBasis(output_size, output_dims)
         self.std_init = (
-            self.output_size
-            if output_dims == 1
-            else int(math.sqrt(self.output_size))
+            self.output_size if output_dims == 1 else int(math.sqrt(self.output_size))
         )
         self.curr_std = self.std_init
         self.bmu = None
-        self.side = (
-            None if output_dims == 1 else int(math.sqrt(self.output_size))
-        )
+        self.side = None if output_dims == 1 else int(math.sqrt(self.output_size))
 
     def forward(self, x):
         """
-        Computes the forward pass by calculating squared Euclidean distances 
+        Computes the forward pass by calculating squared Euclidean distances
         between input data and the network's weights.
 
         Args:
@@ -150,8 +144,7 @@ class TopologicalMap(torch.nn.Module):
         """
         return torch.argmin(x, dim=-1).detach()
 
-
-    def get_representation(self, x, rtype='point', neighborhood_std=None):
+    def get_representation(self, x, rtype="point", neighborhood_std=None):
         """
         Generates the representation of the Best Matching Unit (BMU) based on the specified type requested.
 
@@ -166,7 +159,7 @@ class TopologicalMap(torch.nn.Module):
 
         self.bmu = self.find_bmu(x)
         if self.bmu is not None:
-            if rtype == 'point':
+            if rtype == "point":
                 if self.output_dims == 1:
                     return self.bmu.float()
 
@@ -175,7 +168,7 @@ class TopologicalMap(torch.nn.Module):
                     col = self.bmu % self.side
                     return torch.stack([row, col]).T.float()
 
-            elif rtype == 'grid':
+            elif rtype == "grid":
                 if neighborhood_std is None:
                     neighborhood_std = self.curr_neighborhood_std
                 phi = self.radial(self.bmu, neighborhood_std)
@@ -201,6 +194,7 @@ class TopologicalMap(torch.nn.Module):
         output = torch.matmul(phi, self.weights.T)
         return output
 
+
 class Updater:
     """
     Class for updating a SOM or STM model.
@@ -209,21 +203,23 @@ class Updater:
     model (torch model): The SOM or STM model to be updated.
     learning_rate (float): The learning rate used by the optimizer.
     mode (str): The type of update ('som' or 'stm').
-    kernel_function (callable, optional): function defining the kernel. 
+    kernel_function (callable, optional): function defining the kernel.
         default is lambda phi: phi            if mode is som
                    lambda phi, psi: phi*psi   if mode is stm
     """
 
-    def __init__(self, model, learning_rate, mode='som', normalized_kernel=True):
+    def __init__(self, model, learning_rate, mode="som", normalized_kernel=True):
         self.model = model
         self.optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate)
         self.mode = mode
         if self.mode == "som":
             self.kernel_function = lambda phi: phi
-        elif self.mode == "stm": 
-            self.kernel_function = lambda phi,psi: phi*psi
+        elif self.mode == "stm":
+            self.kernel_function = lambda phi, psi: phi * psi
 
-    def loss(self, norms2, neighborhood_std, anchors=None, neighborhood_std_anchors=None):
+    def loss(
+        self, norms2, neighborhood_std, anchors=None, neighborhood_std_anchors=None
+    ):
         """
         Compute the SOM/STM loss.
 
@@ -244,20 +240,30 @@ class Updater:
             output = 0.5 * norms2 * self.kernel_function(phi)
         # If anchors are provided, incorporate them into the loss calculation
         else:
-            if neighborhood_std_tags is None: neighborhood_std_tags = neighborhood_std
+            if neighborhood_std_anchors is None:
+                neighborhood_std_anchors = neighborhood_std
             self.model.curr_neighborhood_std = neighborhood_std
             self.model.bmu = self.model.find_bmu(norms2)
             phi = self.model.radial(self.model.bmu, neighborhood_std)
-            psi = self.model.radial(anchors, std_anchors, as_point=True)
+            psi = self.model.radial(anchors, neighborhood_std_anchors, as_point=True)
             output = 0.5 * norms2 * self.kernel_function(phi, psi)
 
         return output.mean()
 
-    def __call__(self, output, neighborhood_std, learning_modulation, target=None, target_neighborhood_std=None):
-        if self.mode == 'som':
+    def __call__(
+        self,
+        output,
+        neighborhood_std,
+        learning_modulation,
+        anchors=None,
+        neighborhood_std_anchors=None,
+    ):
+        if self.mode == "som":
             unmodulated_loss = self.loss(output, neighborhood_std)
-        elif self.mode == 'stm':
-            unmodulated_loss = self.loss(output, neighborhood_std, target, target_neighborhood_std)
+        elif self.mode == "stm":
+            unmodulated_loss = self.loss(
+                output, neighborhood_std, anchors, neighborhood_std_anchors
+            )
         else:
             raise ValueError("Invalid mode. Use 'som' or 'stm'.")
 
@@ -266,4 +272,4 @@ class Updater:
         self.optimizer.step()
         self.optimizer.zero_grad()
 
-        return loss, unmodulated_loss 
+        return loss, unmodulated_loss
