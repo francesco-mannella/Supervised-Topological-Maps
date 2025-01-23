@@ -14,9 +14,10 @@ class RadialBasis:
     centroid. It can be used to generate a grid of points around a central
     point.
     """
+
     def __init__(self, size, dims):
         """
-        This function creates a radial grid with a given size and dimensionality. 
+        This function creates a radial grid with a given size and dimensionality.
 
         Args:
             size (int): The size of the radial grid.
@@ -32,8 +33,8 @@ class RadialBasis:
         elif self.dims == 2:
             self.side = int(math.sqrt(self.size))
             if self.side**2 != self.size:
-                raise "Dinensions must be equal"
-            t =  torch.arange(self.side)
+                raise "Dimensions must be equal"
+            t = torch.arange(self.side)
             meshgrids = torch.meshgrid(t, t, indexing="ij")
             self.grid = torch.stack([x.reshape(-1) for x in meshgrids]).T
         else:
@@ -50,49 +51,50 @@ class RadialBasis:
         Returns:
             The result of the function call.
         """
-        
+
         if self.dims == 1:
             x = index.unsqueeze(dim=-1)
             dists = self.grid - x
         elif self.dims == 2:
             if as_point:
-                index = index.reshape(-1, 2)
-                col, row = index[:, 0], index[:, 1]
+                x = index.unsqueeze(dim=1)
             else:
                 row = index // self.side
                 col = index % self.side
-            x = torch.stack([row, col]).T
-            x = x.unsqueeze(dim=1)
-            dists = torch.norm(
-                    self.grid - x, 
-                    dim=-1)
+                x = torch.stack([row, col]).T
+                x = x.unsqueeze(dim=1)
+            dists = torch.norm(self.grid - x, dim=-1)
+
         output = torch.exp(-0.5 * (std**-2) * dists**2)
         output /= output.sum(dim=-1).unsqueeze(dim=-1)
 
         return output
 
+
 class TopologicalMap(torch.nn.Module):
     """
-    A neural network designed to represent a topological map. The nodes are
-    connected in a way that reflects the topology of the data, allowing the network
-    to recognize patterns and make decisions based on those patterns. 
+    A neural network module that represents a topological map. This map models data topology
+    through connected nodes
     """
-    def __init__(self, input_size, output_size, output_dims=2, parameters = None):
+
+    def __init__(self, input_size, output_size, output_dims=2, parameters=None):
         """
+        Initializes the TopologicalMap with specified input and output dimensions and optionally custom parameters.
 
         Args:
-            input_size (int): The number of inputs for the network.
-            output_size (int): The number of outputs for the network.
-            output_dims (int, optional): The number of dimensions for the output. Defaults to 2.
-            parameters (nparray): The array of initial weights. default is None
+            input_size (int): Number of inputs to the network.
+            output_size (int): Number of outputs from the network.
+            output_dims (int, optional): Dimensionality of the output space. Defaults to 2.
+            parameters (numpy.ndarray, optional): Initial weight parameters; defaults to None, which
+                                                  initializes weights with Xavier normalization.
         """
-        
+
         super(TopologicalMap, self).__init__()
 
         if parameters is None:
             weights = torch.empty(input_size, output_size)
             torch.nn.init.xavier_normal_(weights)
-            self.weights = torch.nn.Parameter(weights, requires_grad=True)
+            self.weights = torch.nn.Parameter(1e-4*weights, requires_grad=True)
         else:
             parameters = torch.tensor(parameters).float()
             self.weights = torch.nn.Parameter(parameters, requires_grad=True)
@@ -101,25 +103,25 @@ class TopologicalMap(torch.nn.Module):
         self.output_size = output_size
         self.output_dims = output_dims
         self.radial = RadialBasis(output_size, output_dims)
-        self.std_init = (self.output_size if output_dims == 1 
-                         else int(math.sqrt(self.output_size)))
+        self.std_init = (
+            self.output_size if output_dims == 1 else int(math.sqrt(self.output_size))
+        )
         self.curr_std = self.std_init
         self.bmu = None
         self.side = None if output_dims == 1 else int(math.sqrt(self.output_size))
 
-    def forward(self, x: torch.Tensor, std: float) -> torch.Tensor:
+    def forward(self, x):
         """
-        Computes the forward pass of the model.
+        Computes the forward pass by calculating squared Euclidean distances
+        between input data and the network's weights.
 
         Args:
-            x (torch.Tensor): Input tensor of shape (N, C, H, W).
-            std (float): Standard deviation of the Gaussian noise.
+            x (torch.Tensor): Input tensor.
 
         Returns:
-            torch.Tensor: Output tensor of shape (N, C, H, W).
+            torch.Tensor: Squared Euclidean distances for each weight vector.
         """
 
-        # Calculate the differences between each weight and input x along a new dimension
         diffs = self.weights.unsqueeze(dim=0) - x.unsqueeze(dim=-1)
 
         # Compute the Euclidean norms of the differences along dimension 1
@@ -128,134 +130,149 @@ class TopologicalMap(torch.nn.Module):
         # Square the norms to obtain squared distances
         norms2 = torch.pow(norms, 2)
 
-        # Find the index of the minimum norm (best matching unit) along dimension -1 and detach it from the computation graph
-        self.bmu = torch.argmin(norms, dim=-1).detach()
+        return norms2
 
-        # Apply the radial function to the best matching unit with the given standard deviation
-        phi = self.radial(self.bmu, std)
-
-        self.curr_std = std
-        self.norms = norms
-        self.phi = phi
-
-        return norms2*phi
-
-    def get_representation(self, rtype="point"):
-        """Returns the representation of the best matching unit (BMU) based on
-        the specified representation type.
+    def find_bmu(self, x):
+        """
+        Identifies the index of the Best Matching Unit (BMU) for a given input.
 
         Args:
-            rtype (str, optional): The representation type to be returned. Valid
-                values are: "point" (default) and "grid".
+            x (torch.Tensor): Input tensor.
 
         Returns:
-            torch.Tensor or None: The representation of the BMU. Returns
-            None if the BMU is not available.
+            torch.Tensor: Index of the BMU.
         """
+        return torch.argmin(x, dim=-1).detach()
+
+    def get_representation(self, x, rtype="point", neighborhood_std=None):
+        """
+        Generates the representation of the Best Matching Unit (BMU) based on the specified type requested.
+
+        Args:
+            x (torch.Tensor): Input tensor.
+            rtype (str, optional): Type of the representation. Supported types are 'point' (default) and 'grid'.
+            neighborhood_std (float, optional): Standard deviation for the neighborhood function. Defaults to current neighborhood_std.
+
+        Returns:
+            torch.Tensor or None: BMU representation based on the specified type; None if BMU is unavailable.
+        """
+
+        self.bmu = self.find_bmu(x)
         if self.bmu is not None:
             if rtype == "point":
                 if self.output_dims == 1:
-                    return self.bmu.tolist() 
+                    return self.bmu.float()
 
                 elif self.output_dims == 2:
                     row = self.bmu // self.side
                     col = self.bmu % self.side
-                    return torch.stack([row, col]).T.float() 
+                    return torch.stack([row, col]).T.float()
 
             elif rtype == "grid":
-                std = self.curr_std
-                phi = self.radial(self.bmu, std)
+                if neighborhood_std is None:
+                    neighborhood_std = self.curr_neighborhood_std
+                phi = self.radial(self.bmu, neighborhood_std)
                 return phi
         else:
             return None
 
-    def backward(self, point, std=None):
+    def backward(self, point, neighborhood_std=None):
         """
-        Computes the backward pass of the given point.
+        Executes the backward pass for a specified point.
 
         Args:
-            point (int): The point to compute the backward pass for.
-            std (float, optional): The standard deviation to use for the backward pass. Defaults to None.
+            point (int): Target point for the backward pass.
+            neighborhood_std (float, optional): Standard deviation for the radial basis function. Defaults to current neighborhood_std.
 
         Returns:
-            float: The result of the backward pass.
+            torch.Tensor: Result of the backward pass for the specified point.
         """
 
-        if std is None: std = self.curr_std
-        phi = self.radial(point, std, as_point=True)
+        if neighborhood_std is None:
+            neighborhood_std = self.curr_neighborhood_std
+        phi = self.radial(point, neighborhood_std, as_point=True)
         output = torch.matmul(phi, self.weights.T)
-        return  output
+        return output
 
 
-def som_loss(output):
-    """Computes the loss for reproducing a Self-Organizing Map.
-
-    Args:
-        output (array): Output of the SOM network.
-
-    Returns:
-        float: Loss value.
+class Updater:
     """
-    return 0.5*output.mean()
+    Class for updating a SOM or STM model.
 
-def stm_loss(output, target):
-    """Calculates the loss for reproducing a Supervised Topological Map.
-
-    Args:
-        output (torch.Tensor): Output of the model.
-        target (torch.Tensor): Target of the model.
-
-    Returns:
-        torch.Tensor: Loss value.
-    """
-    filtered = output * target
-    return 0.5*filtered.mean()
-
-
-class SOMUpdater:
-    """
-    Class for updating a Supervised Topological Map (STM) model.
-    
     Parameters:
-    stm (torch model): The STM model to be updated
-    learning_rate (float): The learning rate used by the optimizer
+    model (torch model): The SOM or STM model to be updated.
+    learning_rate (float): The learning rate used by the optimizer.
+    mode (str): The type of update ('som' or 'stm').
+    kernel_function (callable, optional): function defining the kernel.
+        default is lambda phi: phi            if mode is som
+                   lambda phi, psi: phi*psi   if mode is stm
     """
 
-    def __init__(self, stm, learning_rate):
+    def __init__(self, model, learning_rate, mode="som", kernel_function=None):
+        self.model = model
+        self.optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate)
+        self.mode = mode
+        if kernel_function is None:
+            if self.mode == "som":
+                self.kernel_function = lambda phi: phi
+            elif self.mode == "stm":
+                self.kernel_function = lambda phi, psi: phi * psi
+        else:
+            self.kernel_function = kernel_function
+
+    def loss(
+        self, norms2, neighborhood_std, anchors=None, neighborhood_std_anchors=None
+    ):
         """
-        Initializes the STMUpdater object with the provided STM model and learning rate.
+        Compute the SOM/STM loss.
 
-        Args:
-        stm (torch model): The STM model to be updated
-        learning_rate (float): The learning rate used by the optimizer
+        Parameters:
+        norms2 (array-like): The squared norm of some input data.
+        neighborhood_std (float): The standard deviation for neighborhood radial calculation.
+        anchors (array-like, optional): Labels or anchors for neighborhood modulation. Default is None.
+        neighborhood_std_anchors (float, optional): The standard deviation for anchors  neighborhood modulation. Default is neighborhood_std.
+
+        Returns:
+        float: The mean value of the computed loss.
         """
+        # If anchors are not provided, calculate loss without anchors
+        if anchors is None:
+            self.model.bmu = self.model.find_bmu(norms2)
+            phi = self.model.radial(self.model.bmu, neighborhood_std)
+            self.model.curr_neighborhood_std = neighborhood_std
+            output = 0.5 * norms2 * self.kernel_function(phi)
+        # If anchors are provided, incorporate them into the loss calculation
+        else:
+            if neighborhood_std_anchors is None:
+                neighborhood_std_anchors = neighborhood_std
+            self.model.curr_neighborhood_std = neighborhood_std
+            self.model.bmu = self.model.find_bmu(norms2)
+            phi = self.model.radial(self.model.bmu, neighborhood_std)
+            psi = self.model.radial(anchors, neighborhood_std_anchors, as_point=True)
+            output = 0.5 * norms2 * self.kernel_function(phi, psi)
 
-        self.optimizer = optim.Adam(
-            params=stm.parameters(), lr=learning_rate
-        )
+        return output.mean()
 
-        self.loss = som_loss
+    def __call__(
+        self,
+        output,
+        neighborhood_std,
+        learning_modulation,
+        anchors=None,
+        neighborhood_std_anchors=None,
+    ):
+        if self.mode == "som":
+            unmodulated_loss = self.loss(output, neighborhood_std)
+        elif self.mode == "stm":
+            unmodulated_loss = self.loss(
+                output, neighborhood_std, anchors, neighborhood_std_anchors
+            )
+        else:
+            raise ValueError("Invalid mode. Use 'som' or 'stm'.")
 
-    def __call__(self, output,  learning_modulation):
-    
-        loss = learning_modulation * self.loss(output)        
+        loss = learning_modulation * unmodulated_loss
         loss.backward(retain_graph=True)
         self.optimizer.step()
         self.optimizer.zero_grad()
 
-class STMUpdater:
-
-    def __init__(self, stm, learning_rate):
-
-        self.optimizer = optim.Adam(
-            params=stm.parameters(), lr=learning_rate
-        )
-
-        self.loss = stm_loss
-
-    def __call__(self, output, target, learning_modulation):
-    
-        loss = learning_modulation * self.loss(output, target)        
-        loss.backward(retain_graph=True)
-        self.optimizer.step()
-        self.optimizer.zero_grad()
+        return loss, unmodulated_loss

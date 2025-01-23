@@ -25,12 +25,12 @@ class TopologicalAE(nn.Module):
         self.deconv1 = nn.ConvTranspose2d(32, 16, kernel_size=4, stride=2, padding=1)
         self.deconv2 = nn.ConvTranspose2d(16, 1, kernel_size=4, stride=2, padding=1)
 
-    def encode(self, x, std):
+    def encode(self, x, neighborhood_std):
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = x.view(x.size(0), -1)
         x = F.relu(self.fc1(x))
-        norm2_phi = self.fc(x, std)
+        norm2_phi = self.fc(x, neighborhood_std)
         radial = self.fc.get_representation("grid")
         return norm2_phi, radial
 
@@ -46,8 +46,8 @@ class TopologicalAE(nn.Module):
         z = torch.sigmoid(self.deconv2(z))
         return z
 
-    def forward(self, x, std):
-        n2_phi, z = self.encode(x, std)
+    def forward(self, x, neighborhood_std):
+        n2_phi, z = self.encode(x, neighborhood_std)
         z = self.reparameterize(z)
         recon_x = self.decode(z)
         return recon_x, n2_phi
@@ -65,12 +65,12 @@ def loss_function(x, reconstructed, n2_phi):
 def train(model, train_loader, optimizer, epoch):
     model.train()
     train_loss = 0
-    std = 10*(0.9**epoch)
+    neighborhood_std = 10*(0.9**epoch)
     lr = 1*(0.9**epoch)
     for batch_idx, (data, labels) in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
-        reconstructed, n2_phi = model(data, std)
+        reconstructed, n2_phi = model(data, neighborhood_std)
         loss = loss_function(data, reconstructed, n2_phi)
         loss *= lr
         loss.backward()
