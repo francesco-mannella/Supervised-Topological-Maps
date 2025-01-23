@@ -26,10 +26,10 @@ def som_training(model, data_loader, epochs):
 
     # Initialize hyperparameters
     optimizer_learning_rate = 0.02
-    loss_modulation_final = 0.0000001
+    loss_modulation_final = 1e-2
     loss_modulation_gamma = np.exp(np.log(loss_modulation_final) / epochs)
     loss_modulation_scale = 1
-    neighborhood_std_final = 0.000001
+    neighborhood_std_final = 1e-2
     neighborhood_std_gamma = np.exp(np.log(neighborhood_std_final) / epochs)
     neighborhood_std_baseline = 0.5*np.sqrt(2)
     neighborhood_std_scale = model.side
@@ -71,9 +71,11 @@ def som_training(model, data_loader, epochs):
             _, loss = updater(outputs, neighborhood_std, loss_modulation )
 
             running_loss += loss.item()
+        
+        running_loss /= i
 
-            # Print loss
-            print(f"[{epoch}, {i:5d}] loss: {running_loss:.5f}")
+        # Print loss
+        print(f"[epoch: {epoch}] loss: {running_loss:.5f}")
 
         # Append values to corresponding lists
         loss_modulation_values.append(loss_modulation)
@@ -306,7 +308,7 @@ if __name__ == "__main__":
 
     else:
 
-        som.load_state_dict(torch.load("som_colormap.pt"))
+        som.load_state_dict(torch.load("som_colormap.pt", weights_only=False))
 
 
 

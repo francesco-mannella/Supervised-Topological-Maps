@@ -4,7 +4,7 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader, Subset
-from stm.topological_maps import TopologicalMap, som_stm_loss
+from stm.topological_maps import TopologicalMap, Updater
 import matplotlib
 from matplotlib import gridspec
 
@@ -20,7 +20,7 @@ def som_training(model, data_loader, epochs):
         epochs (int): The number of epochs to train the model for.
 
     Returns:
-        lr_values (list): List of learning rate values for each epoch.
+        loss_modulation_values (list): List of learning rate values for each epoch.
         loss_values (list): List of loss values for each epoch.
         activations_data (list): List of activation data for each epoch.
         weights_data (list): List of weight data for each epoch.
@@ -28,19 +28,22 @@ def som_training(model, data_loader, epochs):
 
     # Initialize hyperparameters
     optimizer_learning_rate = 0.02
-    loss_modulation_final = 0.0000001
+    loss_modulation_final = 1e-4
     loss_modulation_gamma = np.exp(np.log(loss_modulation_final) / epochs)
-    neighborhood_std_final = 0.000001
+    loss_modulation_scale = 300
+    neighborhood_std_final = 1e-4
     neighborhood_std_gamma = np.exp(np.log(neighborhood_std_final) / epochs)
-    neighborhood_std_baseline = 1
+    neighborhood_std_baseline = 0.5*np.sqrt(2)
+    neighborhood_std_scale = model.side
 
-    # Initialize optimizer for model parameters
-    optimizer = torch.optim.Adam(
-        model.parameters(), lr=optimizer_learning_rate
-    )
+    # Initialize som updater 
+    updater = Updater(
+            model, 
+            learning_rate=optimizer_learning_rate,
+            mode="som")
 
     # Initialize lists to store output values
-    lr_values = []
+    loss_modulation_values = []
     loss_values = []
     activations_data = []
     weights_data = []
@@ -52,45 +55,36 @@ def som_training(model, data_loader, epochs):
         # Calculate standard deviation for current epoch
         neighborhood_std = (
             neighborhood_std_baseline
-            + model.std_init * neighborhood_std_gamma**epoch
+            + neighborhood_std_scale * neighborhood_std_gamma**epoch
         )
 
         # Calculate learning rate for current epoch
-        lr = model.std_init * loss_modulation_gamma**epoch
+        loss_modulation = loss_modulation_scale * loss_modulation_gamma**epoch
 
         # Iterate over data batches
         for i, data in enumerate(data_loader):
-            inputs, _ = data
-
-            # zero the parameter gradients
-            optimizer.zero_grad()
+            inputs,_ = data
 
             # Forward pass through the model
-            # outputs = model(inputs, neighborhood_std)
             outputs = model(inputs)
 
-            # Calculate loss
-            # sloss =  som_loss(outputs)
-            sloss = som_stm_loss(som, outputs, neighborhood_std, anchors=None)
-            loss = lr * sloss
+            # update
+            _, loss = updater(outputs, neighborhood_std, loss_modulation )
 
-            # Backward pass and update gradients
-            loss.backward()
-            optimizer.step()
+            running_loss += loss.item()
+        running_loss /= i
 
-            running_loss += sloss.item()
-
-            # Print loss
-            print(f'[{epoch}, {i:5d}] loss: {running_loss:.5f}')
+        # Print loss
+        print(f"[epoch: {epoch}] loss: {running_loss:.5f}")
 
         # Append values to corresponding lists
-        lr_values.append(lr)
+        loss_modulation_values.append(loss_modulation)
         loss_values.append(running_loss)
-        activations_data.append(np.stack(model.get_representation('grid')))
+        activations_data.append(np.stack(model.get_representation(outputs, "grid")))
         weights_data.append(np.stack(model.weights.tolist()))
 
     # Return output values
-    return lr_values, loss_values, activations_data, weights_data
+    return loss_modulation_values, loss_values, activations_data, weights_data
 
 
 if __name__ == '__main__':
@@ -101,7 +95,7 @@ if __name__ == '__main__':
     input_size = 28 * 28
     output_size = 10 * 10
     batch_size = 100
-    epochs = 400
+    epochs = 100
 
     if train == True:
 
@@ -131,16 +125,20 @@ if __name__ == '__main__':
         stored_data = som_training(som, dataLoader, epochs=epochs)
 
         # save
-        torch.save(som, 'som_mnist.pt')
 
-    som = torch.load('som_mnist.pt')
+        torch.save(som.state_dict(), "som_mnist.pt")
+
+    else:
+
+        som.load_state_dict(torch.load("som_mnist.pt", weights_only=True))
+
 
     # plot the learned weights
     w = (
         som.weights.detach()
         .numpy()
         .reshape(28, 28, 10, 10)
-        .transpose(2, 0, 3, 1)
+        .transpose(3, 0, 2, 1)
         .reshape(28 * 10, 28 * 10)
     )
 
@@ -167,32 +165,13 @@ if __name__ == '__main__':
 
     # a generated color
     for x in range(10):
-        point = torch.rand(1, 2) * 10
+        point = torch.rand(1, 2) * 10 + 0.5
         num = som.backward(point).detach().numpy().ravel()
         sc.set_offsets(point.detach().numpy().ravel() * 28)
         img.set_array(num.reshape(28, 28))
 
         fig.canvas.draw()
-        fig.savefig(f'stm_mnist_{x:04d}.png')
+        fig.savefig(f'som_mnist_{x:04d}.png')
+    
+    plt.show()
 
-    # %%
-
-    rdata = [d for d, l in subset]
-    rdata = [rdata[38], rdata[231]]
-
-    for i in rdata:
-
-        # _ = som(i.reshape(1, -1), .8)
-        som.neighborhood_std = 0.8
-        norms2 = som(i.reshape(1, -1))
-        som.bmu = som.find_bmu(norms2)
-        m = np.stack(som.get_representation('grid'))
-
-        fig, ax = plt.subplots(2, 1, figsize=(4, 8))
-        ax[0].imshow(m.reshape(10, 10), cmap=plt.cm.binary)
-        ax[1].imshow(i.reshape(28, 28), cmap=plt.cm.gray)
-        ax[0].set_xticks([])
-        ax[0].set_yticks([])
-        ax[1].set_xticks([])
-        ax[1].set_yticks([])
-        plt.show()

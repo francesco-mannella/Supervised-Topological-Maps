@@ -68,7 +68,11 @@ def stm_training(model, data_loader, epochs):
 
             # print statistics
             running_loss += loss.item()
-            print(f"[{epoch}, {i:5d}] loss: {running_loss:.6f}")
+
+        running_loss /= i
+
+        # Print loss
+        print(f"[epoch: {epoch}] loss: {running_loss:.5f}")
 
         # Append values to corresponding lists
         loss_modulation_values.append(loss_modulation)
@@ -168,7 +172,7 @@ if __name__ == "__main__":
 
     else:
 
-        stm.load_state_dict(torch.load("stm_colormap.pt"))
+        stm.load_state_dict(torch.load("stm_colormap.pt", weights_only=True))
 
     # %%
 
