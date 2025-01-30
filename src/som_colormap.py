@@ -1,9 +1,8 @@
 import torch
-import math
 import numpy as np
 import matplotlib.pyplot as plt
 import mkvideo
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 from stm.topological_maps import TopologicalMap, Updater
 
 rng = np.random.RandomState(4)
@@ -31,15 +30,11 @@ def som_training(model, data_loader, epochs):
     loss_modulation_scale = 1
     neighborhood_std_final = 1e-2
     neighborhood_std_gamma = np.exp(np.log(neighborhood_std_final) / epochs)
-    neighborhood_std_baseline = 0.5*np.sqrt(2)
+    neighborhood_std_baseline = 0.5 * np.sqrt(2)
     neighborhood_std_scale = model.side
 
-    # Initialize som updater 
-    updater = Updater(
-            model, 
-            learning_rate=optimizer_learning_rate,
-            mode="som")
-
+    # Initialize som updater
+    updater = Updater(model, learning_rate=optimizer_learning_rate, mode="som")
 
     # Initialize lists to store output values
     loss_modulation_values = []
@@ -68,10 +63,10 @@ def som_training(model, data_loader, epochs):
             outputs = model(inputs)
 
             # update
-            _, loss = updater(outputs, neighborhood_std, loss_modulation )
+            _, loss = updater(outputs, neighborhood_std, loss_modulation)
 
             running_loss += loss.item()
-        
+
         running_loss /= i
 
         # Print loss
@@ -189,7 +184,12 @@ def plot_loss_modulation(ax, loss_modulations, epochs):
     tloss_modulations[len(loss_modulations) :] = np.nan
     # Plot the learning rate values
     ax.plot(range(epochs), tloss_modulations, c="black")
-    ax.scatter(len(loss_modulations) - 1, tloss_modulations[len(loss_modulations) - 1], s=40, c="black")
+    ax.scatter(
+        len(loss_modulations) - 1,
+        tloss_modulations[len(loss_modulations) - 1],
+        s=40,
+        c="black",
+    )
     # Set the x-axis limits
     ax.set_xlim(-epochs * 0.1, epochs * 1.1)
     # Set the y-axis limits
@@ -283,7 +283,6 @@ def plot_weights_and_colors(som):
 
 
 if __name__ == "__main__":
-
     train = True
 
     # train parameters
@@ -293,7 +292,6 @@ if __name__ == "__main__":
     epochs = 100
 
     if train:
-
         # Build the dataset and the data loader
         dataset = np.random.rand(1000, 3)
         dataLoader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
@@ -307,14 +305,13 @@ if __name__ == "__main__":
         torch.save(som.state_dict(), "som_colormap.pt")
 
     else:
-
         som.load_state_dict(torch.load("som_colormap.pt", weights_only=False))
-
-
 
     # Plot generated pattern onto the som color manifold
     plot_weights_and_colors(som)
 
     # Plot training results
     loss_modulation_values, loss_values, activations_data, weights_data = stored_data
-    plot_training_results(loss_modulation_values, loss_values, activations_data, weights_data, epochs)
+    plot_training_results(
+        loss_modulation_values, loss_values, activations_data, weights_data, epochs
+    )

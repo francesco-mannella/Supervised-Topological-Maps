@@ -1,6 +1,5 @@
 import torch
 import math
-import numpy as np
 
 
 class DimensionalityError(Exception):
@@ -94,7 +93,7 @@ class TopologicalMap(torch.nn.Module):
         if parameters is None:
             weights = torch.empty(input_size, output_size)
             torch.nn.init.xavier_normal_(weights)
-            self.weights = torch.nn.Parameter(1e-4*weights, requires_grad=True)
+            self.weights = torch.nn.Parameter(1e-4 * weights, requires_grad=True)
         else:
             parameters = torch.tensor(parameters).float()
             self.weights = torch.nn.Parameter(parameters, requires_grad=True)

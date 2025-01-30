@@ -1,11 +1,10 @@
-import torch, torchvision
+import torch
+import torchvision
 from torchvision import transforms as T
-import math
 import numpy as np
 import matplotlib.pyplot as plt
-from torch.utils.data import Dataset, DataLoader, Subset
+from torch.utils.data import DataLoader, Subset
 from stm.topological_maps import TopologicalMap, Updater
-import matplotlib
 from matplotlib import gridspec
 
 # matplotlib.use("agg")
@@ -25,7 +24,7 @@ def stm_training(model, data_loader, epochs):
         activations_data (list): Activation data obtained during training.
         weights_data (list): Model weights at each epoch.
     """
-    
+
     # Initialize hyperparameters
     optimizer_learning_rate = 0.02
     loss_modulation_final = 1e-4
@@ -33,9 +32,9 @@ def stm_training(model, data_loader, epochs):
     loss_modulation_scale = 100
     neighborhood_std_final = 1e-4
     neighborhood_std_gamma = np.exp(np.log(neighborhood_std_final) / epochs)
-    neighborhood_std_baseline = 0.5*np.sqrt(2)
+    neighborhood_std_baseline = 0.5 * np.sqrt(2)
     neighborhood_std_scale = model.side
-    
+
     points = (
         torch.tensor(
             [
@@ -53,13 +52,9 @@ def stm_training(model, data_loader, epochs):
         )
         * 10
     )
-    
 
-    # Initialize stm updater 
-    updater = Updater(
-            model, 
-            learning_rate=optimizer_learning_rate,
-            mode="stm")
+    # Initialize stm updater
+    updater = Updater(model, learning_rate=optimizer_learning_rate, mode="stm")
 
     # Initialize lists to store output values
     loss_modulation_values = []
@@ -89,11 +84,12 @@ def stm_training(model, data_loader, epochs):
 
             # update
             _, loss = updater(
-                    outputs, 
-                    neighborhood_std, 
-                    loss_modulation, 
-                    anchors=points[labels],
-                    neighborhood_std_anchors=neighborhood_std_baseline)
+                outputs,
+                neighborhood_std,
+                loss_modulation,
+                anchors=points[labels],
+                neighborhood_std_anchors=neighborhood_std_baseline,
+            )
 
             running_loss += loss.item()
         running_loss /= i
@@ -111,10 +107,9 @@ def stm_training(model, data_loader, epochs):
     return loss_modulation_values, loss_values, activations_data, weights_data
 
 
-if __name__ == '__main__':
-
+if __name__ == "__main__":
     train = True
-    # train = False 
+    # train = False
 
     # train parameters
     input_size = 28 * 28
@@ -125,12 +120,10 @@ if __name__ == '__main__':
     # prepare the model and the optimizer
     stm = TopologicalMap(input_size=input_size, output_size=output_size)
 
-
-    if train == True:
-
+    if train is True:
         # Build the dataset and the data loader
         dataset = torchvision.datasets.MNIST(
-            '/tmp/mnist',
+            "/tmp/mnist",
             train=True,
             download=True,
             transform=T.Compose(
@@ -142,7 +135,7 @@ if __name__ == '__main__':
             ),
         )
 
-        K = 1000   # enter your length here
+        K = 1000  # enter your length here
         subsample_train_indices = torch.randperm(len(dataset))[:K]
         subset = Subset(dataset, indices=subsample_train_indices)
         dataLoader = DataLoader(subset, batch_size=batch_size, shuffle=True)
@@ -155,9 +148,7 @@ if __name__ == '__main__':
         torch.save(stm.state_dict(), "stm_mnist.pt")
 
     else:
-
         stm.load_state_dict(torch.load("stm_mnist.pt", weights_only=True))
-
 
     # plot the learned weights
     w = (
@@ -174,7 +165,7 @@ if __name__ == '__main__':
     spec = gridspec.GridSpec(ncols=14, nrows=10, figure=fig)
     ax1 = fig.add_subplot(spec[:10, :10])
     ax1.imshow(w, cmap=plt.cm.gray)
-    sc = ax1.scatter(-1, -1, fc='red', ec='white', s=100)
+    sc = ax1.scatter(-1, -1, fc="red", ec="white", s=100)
     ax1.set_xlim(0, 28 * 10)
     ax1.set_ylim(28 * 10, 0)
     ax1.set_xticks([])
@@ -192,12 +183,11 @@ if __name__ == '__main__':
     # a generated color
     for x in range(10):
         point = torch.rand(1, 2) * 10 + 0.5
-        num = stm.backward(point, 0.5*np.sqrt(2)).detach().numpy().ravel()
+        num = stm.backward(point, 0.5 * np.sqrt(2)).detach().numpy().ravel()
         sc.set_offsets(point.detach().numpy().ravel() * 28)
         img.set_array(num.reshape(28, 28))
 
         fig.canvas.draw()
-        fig.savefig(f'stm_mnist_{x:04d}.png')
-    
-    plt.show()
+        fig.savefig(f"stm_mnist_{x:04d}.png")
 
+    plt.show()

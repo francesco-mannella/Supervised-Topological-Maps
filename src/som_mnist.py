@@ -1,11 +1,10 @@
-import torch, torchvision
+import torch
+import torchvision
 from torchvision import transforms as T
-import math
 import numpy as np
 import matplotlib.pyplot as plt
-from torch.utils.data import Dataset, DataLoader, Subset
+from torch.utils.data import DataLoader, Subset
 from stm.topological_maps import TopologicalMap, Updater
-import matplotlib
 from matplotlib import gridspec
 
 # matplotlib.use("agg")
@@ -33,14 +32,11 @@ def som_training(model, data_loader, epochs):
     loss_modulation_scale = 300
     neighborhood_std_final = 1e-4
     neighborhood_std_gamma = np.exp(np.log(neighborhood_std_final) / epochs)
-    neighborhood_std_baseline = 0.5*np.sqrt(2)
+    neighborhood_std_baseline = 0.5 * np.sqrt(2)
     neighborhood_std_scale = model.side
 
-    # Initialize som updater 
-    updater = Updater(
-            model, 
-            learning_rate=optimizer_learning_rate,
-            mode="som")
+    # Initialize som updater
+    updater = Updater(model, learning_rate=optimizer_learning_rate, mode="som")
 
     # Initialize lists to store output values
     loss_modulation_values = []
@@ -63,13 +59,13 @@ def som_training(model, data_loader, epochs):
 
         # Iterate over data batches
         for i, data in enumerate(data_loader):
-            inputs,_ = data
+            inputs, _ = data
 
             # Forward pass through the model
             outputs = model(inputs)
 
             # update
-            _, loss = updater(outputs, neighborhood_std, loss_modulation )
+            _, loss = updater(outputs, neighborhood_std, loss_modulation)
 
             running_loss += loss.item()
         running_loss /= i
@@ -87,8 +83,7 @@ def som_training(model, data_loader, epochs):
     return loss_modulation_values, loss_values, activations_data, weights_data
 
 
-if __name__ == '__main__':
-
+if __name__ == "__main__":
     train = True
 
     # train parameters
@@ -97,11 +92,10 @@ if __name__ == '__main__':
     batch_size = 100
     epochs = 100
 
-    if train == True:
-
+    if train is True:
         # Build the dataset and the data loader
         dataset = torchvision.datasets.MNIST(
-            '/tmp/mnist',
+            "/tmp/mnist",
             train=True,
             download=True,
             transform=T.Compose(
@@ -113,7 +107,7 @@ if __name__ == '__main__':
             ),
         )
 
-        K = 1000   # enter your length here
+        K = 1000  # enter your length here
         subsample_train_indices = torch.randperm(len(dataset))[:K]
         subset = Subset(dataset, indices=subsample_train_indices)
         dataLoader = DataLoader(subset, batch_size=batch_size, shuffle=True)
@@ -129,9 +123,7 @@ if __name__ == '__main__':
         torch.save(som.state_dict(), "som_mnist.pt")
 
     else:
-
         som.load_state_dict(torch.load("som_mnist.pt", weights_only=True))
-
 
     # plot the learned weights
     w = (
@@ -148,7 +140,7 @@ if __name__ == '__main__':
     spec = gridspec.GridSpec(ncols=14, nrows=10, figure=fig)
     ax1 = fig.add_subplot(spec[:10, :10])
     ax1.imshow(w, cmap=plt.cm.gray)
-    sc = ax1.scatter(-1, -1, fc='red', ec='white', s=100)
+    sc = ax1.scatter(-1, -1, fc="red", ec="white", s=100)
     ax1.set_xlim(0, 28 * 10)
     ax1.set_ylim(28 * 10, 0)
     ax1.set_xticks([])
@@ -171,7 +163,6 @@ if __name__ == '__main__':
         img.set_array(num.reshape(28, 28))
 
         fig.canvas.draw()
-        fig.savefig(f'som_mnist_{x:04d}.png')
-    
-    plt.show()
+        fig.savefig(f"som_mnist_{x:04d}.png")
 
+    plt.show()

@@ -1,5 +1,4 @@
 import torch
-import math
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
@@ -50,7 +49,6 @@ def stm_training(model, data_loader, epochs):
         loss_modulation = loss_modulation_scale * loss_modulation_gamma**epoch
 
         for i, data in enumerate(data_loader):
-
             inputs, labels = data
 
             # forward
@@ -147,7 +145,6 @@ class ColorDataset(Dataset):
 
 
 if __name__ == "__main__":
-
     train = True
 
     # training parameters
@@ -156,8 +153,7 @@ if __name__ == "__main__":
     output_size = 100
     epochs = 100
 
-    if train == True:
-
+    if train is True:
         # Build the dataset and the data loader
         dataset = ColorDataset(1000)
         dataLoader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
@@ -171,7 +167,6 @@ if __name__ == "__main__":
         torch.save(stm.state_dict(), "stm_colormap.pt")
 
     else:
-
         stm.load_state_dict(torch.load("stm_colormap.pt", weights_only=True))
 
     # %%
