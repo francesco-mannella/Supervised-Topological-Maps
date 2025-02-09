@@ -210,7 +210,11 @@ class TopologicalMap(torch.nn.Module):
         if neighborhood_std is None:
             neighborhood_std = self.curr_neighborhood_std
         phi = self.radial(point, neighborhood_std, as_point=True)
-        output = torch.matmul(phi, self.weights.T)
+        max_idx = phi.argmax()
+        hov_phi = torch.nn.functional.one_hot(
+            max_idx, self.output_size
+        ).float()
+        output = torch.matmul(hov_phi, self.weights.T)
         return output
 
 
@@ -242,7 +246,7 @@ class Updater:
         else:
             self.kernel_function = kernel_function
 
-    def loss(
+    def losses(
         self,
         norms2,
         neighborhood_std,
@@ -283,7 +287,7 @@ class Updater:
             )
             output = 0.5 * norms2 * self.kernel_function(phi, psi)
 
-        return output.mean()
+        return output
 
     def __call__(
         self,
@@ -294,15 +298,16 @@ class Updater:
         neighborhood_std_anchors=None,
     ):
         if self.mode == "som":
-            unmodulated_loss = self.loss(output, neighborhood_std)
+            losses = self.loss(output, neighborhood_std)
         elif self.mode == "stm":
-            unmodulated_loss = self.loss(
+            losses = self.losses(
                 output, neighborhood_std, anchors, neighborhood_std_anchors
             )
         else:
             raise ValueError("Invalid mode. Use 'som' or 'stm'.")
 
-        loss = learning_modulation * unmodulated_loss
+        loss = (learning_modulation * losses).mean()
+        unmodulated_loss = losses.mean()
         loss.backward(retain_graph=True)
         self.optimizer.step()
         self.optimizer.zero_grad()
