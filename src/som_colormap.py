@@ -1,8 +1,9 @@
-import torch
-import numpy as np
 import matplotlib.pyplot as plt
-import mkvideo
+import numpy as np
+import torch
 from torch.utils.data import DataLoader
+
+import mkvideo
 from stm.topological_maps import TopologicalMap, Updater
 
 rng = np.random.RandomState(4)
@@ -75,7 +76,9 @@ def som_training(model, data_loader, epochs):
         # Append values to corresponding lists
         loss_modulation_values.append(loss_modulation)
         loss_values.append(running_loss)
-        activations_data.append(np.stack(model.get_representation(outputs, "grid")))
+        activations_data.append(
+            np.stack(model.get_representation(outputs, "grid"))
+        )
         weights_data.append(np.stack(model.weights.tolist()))
 
     # Return output values
@@ -88,11 +91,13 @@ def plot_training_results(
     """Plot the training results.
 
     Args:
-        loss_modulation_values (list): List of learning rate values over epochs.
-        loss_values (list): List of loss values over epochs.
-        activations_data (list): List of activation data snapshots over epochs.
-        weights_data (list): List of weight data snapshots over epochs.
-        epochs (int): The number of epochs the model was trained for.
+        - loss_modulation_values (list): List of learning rate values over
+          epochs.
+        - loss_values (list): List of loss values over epochs.
+        - activations_data (list): List of activation data snapshots over
+          epochs.
+        - weights_data (list): List of weight data snapshots over epochs.
+        - epochs (int): The number of epochs the model was trained for.
     """
     # Create subplots for the activation, weight, and learning rate plots
     fig1, ax1 = plt.subplots(1, 1)
@@ -180,7 +185,9 @@ def plot_loss_modulation(ax, loss_modulations, epochs):
     # Initialize an array for the learning rate values
     tloss_modulations = np.zeros(epochs)
     # Assign the learning rate values to the array
-    tloss_modulations[: len(loss_modulations)] = np.array(loss_modulations) / 10
+    tloss_modulations[: len(loss_modulations)] = (
+        np.array(loss_modulations) / 10
+    )
     tloss_modulations[len(loss_modulations) :] = np.nan
     # Plot the learning rate values
     ax.plot(range(epochs), tloss_modulations, c="black")
@@ -201,9 +208,12 @@ def hinton(matrix, max_weight=None, ax=None):
     """Draw a Hinton diagram for visualizing a weight matrix.
 
     Args:
-        matrix (numpy.ndarray): The weight matrix to visualize.
-        max_weight (float, optional): The maximum weight value. If not provided, it will be calculated as 2 raised to the ceiling of the logarithm base 2 of the maximum absolute weight value in the matrix.
-        ax (matplotlib.axes.Axes, optional): The axes to plot on. If not provided, the current axes will be used.
+        - matrix (numpy.ndarray): The weight matrix to visualize.
+        - max_weight (float, optional): The maximum weight value. If not
+          provided, it will be calculated as 2 raised to the ceiling of the
+          logarithm base 2 of the maximum absolute weight value in the matrix.
+        - ax (matplotlib.axes.Axes, optional): The axes to plot on. If not
+          provided, the current axes will be used.
     """
     # Set the axes if not provided
     ax = ax if ax is not None else plt.gca()
@@ -226,11 +236,16 @@ def hinton(matrix, max_weight=None, ax=None):
     for (x, y), w in np.ndenumerate(matrix):
         # Set the color based on the sign of the weight
         color = "white" if w > 0 else "black"
-        # Calculate the size of the rectangle based on the weight value and the maximum weight value
+        # Calculate the size of the rectangle based on the weight value and the
+        # maximum weight value
         size = np.sqrt(abs(w) / max_weight)
         # Create a rectangle patch for each weight value
         rect = plt.Rectangle(
-            [x - size / 2, y - size / 2], size, size, facecolor=color, edgecolor=color
+            [x - size / 2, y - size / 2],
+            size,
+            size,
+            facecolor=color,
+            edgecolor=color,
         )
         # Add the rectangle patch to the axes
         ax.add_patch(rect)
@@ -243,8 +258,9 @@ def hinton(matrix, max_weight=None, ax=None):
 
 def plot_weights_and_colors(som):
     """
-    Plots the learned weights of a self-organizing map (SOM) as an image and generates input patterns randomly
-    to demonstrate how they can be projected onto the SOM.
+    Plots the learned weights of a self-organizing map (SOM) as an image and
+    generates input patterns randomly to demonstrate how they can be projected
+    onto the SOM.
 
     Parameters:
         som (torch.nn.Module): The self-organizing map model.
@@ -252,7 +268,9 @@ def plot_weights_and_colors(som):
     fig, ax = plt.subplots()
 
     # Reshape and transpose the weights tensor
-    weights = som.weights.detach().numpy().reshape(3, 10, 10).transpose(1, 2, 0)
+    weights = (
+        som.weights.detach().numpy().reshape(3, 10, 10).transpose(1, 2, 0)
+    )
 
     def get_projection(point):
         """
@@ -291,13 +309,12 @@ if __name__ == "__main__":
     output_size = 100
     epochs = 100
 
+    # prepare the model and the optimizer
+    som = TopologicalMap(input_size=input_size, output_size=output_size)
     if train:
         # Build the dataset and the data loader
         dataset = np.random.rand(1000, 3)
         dataLoader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-
-        # prepare the model and the optimizer
-        som = TopologicalMap(input_size=input_size, output_size=output_size)
 
         # train
         stored_data = som_training(som, dataLoader, epochs=epochs)
@@ -311,7 +328,13 @@ if __name__ == "__main__":
     plot_weights_and_colors(som)
 
     # Plot training results
-    loss_modulation_values, loss_values, activations_data, weights_data = stored_data
+    loss_modulation_values, loss_values, activations_data, weights_data = (
+        stored_data
+    )
     plot_training_results(
-        loss_modulation_values, loss_values, activations_data, weights_data, epochs
+        loss_modulation_values,
+        loss_values,
+        activations_data,
+        weights_data,
+        epochs,
     )

@@ -1,11 +1,12 @@
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import torchvision
-from torchvision import transforms as T
-import numpy as np
-import matplotlib.pyplot as plt
-from torch.utils.data import DataLoader, Subset
-from stm.topological_maps import TopologicalMap, Updater
 from matplotlib import gridspec
+from torch.utils.data import DataLoader, Subset
+from torchvision import transforms as T
+
+from stm.topological_maps import TopologicalMap, Updater
 
 # matplotlib.use("agg")
 
@@ -19,10 +20,10 @@ def som_training(model, data_loader, epochs):
         epochs (int): The number of epochs to train the model for.
 
     Returns:
-        loss_modulation_values (list): List of learning rate values for each epoch.
-        loss_values (list): List of loss values for each epoch.
-        activations_data (list): List of activation data for each epoch.
-        weights_data (list): List of weight data for each epoch.
+        - loss_modulation_values (list): List of learning rate values for each epoch.
+        - loss_values (list): List of loss values for each epoch.
+        - activations_data (list): List of activation data for each epoch.
+        - weights_data (list): List of weight data for each epoch.
     """
 
     # Initialize hyperparameters
@@ -76,7 +77,9 @@ def som_training(model, data_loader, epochs):
         # Append values to corresponding lists
         loss_modulation_values.append(loss_modulation)
         loss_values.append(running_loss)
-        activations_data.append(np.stack(model.get_representation(outputs, "grid")))
+        activations_data.append(
+            np.stack(model.get_representation(outputs, "grid"))
+        )
         weights_data.append(np.stack(model.weights.tolist()))
 
     # Return output values

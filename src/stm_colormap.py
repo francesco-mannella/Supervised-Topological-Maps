@@ -1,7 +1,8 @@
-import torch
-import numpy as np
 import matplotlib.pyplot as plt
-from torch.utils.data import Dataset, DataLoader
+import numpy as np
+import torch
+from torch.utils.data import DataLoader, Dataset
+
 from stm.topological_maps import TopologicalMap, Updater
 
 
@@ -9,15 +10,17 @@ def stm_training(model, data_loader, epochs):
     """Train a supervised topological map.
 
     Args:
-        model (TopologicalMap): Instance of the TopologicalMap class to be trained.
-        data_loader (torch.utils.DataLoader): Data loader containing training data.
-        epochs (int): Number of epochs to train the model for.
+        - model (TopologicalMap): Instance of the TopologicalMap class to be
+          trained.
+        - data_loader (torch.utils.DataLoader): Data loader containing training
+          data.
+        - epochs (int): Number of epochs to train the model for.
 
     Returns:
-        loss_modulation_values (list): Learning rates used in each epoch.
-        loss_values (list): Loss values for each epoch.
-        activations_data (list): Activation data obtained during training.
-        weights_data (list): Model weights at each epoch.
+        - loss_modulation_values (list): Learning rates used in each epoch.
+        - loss_values (list): Loss values for each epoch.
+        - activations_data (list): Activation data obtained during training.
+        - weights_data (list): Model weights at each epoch.
     """
 
     # Initialize hyperparameters
@@ -75,7 +78,9 @@ def stm_training(model, data_loader, epochs):
         # Append values to corresponding lists
         loss_modulation_values.append(loss_modulation)
         loss_values.append(running_loss)
-        activations_data.append(np.stack(model.get_representation(outputs, "grid")))
+        activations_data.append(
+            np.stack(model.get_representation(outputs, "grid"))
+        )
         weights_data.append(np.stack(model.weights.tolist()))
 
     # Return output values
@@ -84,7 +89,8 @@ def stm_training(model, data_loader, epochs):
 
 class ColorDataset(Dataset):
     """
-    This dataset contains labeled colors that have been grouped into the six basic colors.
+    This dataset contains labeled colors that have been grouped into the six
+    basic colors.
     """
 
     def __init__(self, size=1000):
@@ -153,13 +159,13 @@ if __name__ == "__main__":
     output_size = 100
     epochs = 100
 
+    # prepare the model and the optimizer
+    stm = TopologicalMap(input_size=input_size, output_size=output_size)
+
     if train is True:
         # Build the dataset and the data loader
         dataset = ColorDataset(1000)
         dataLoader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-
-        # prepare the model and the optimizer
-        stm = TopologicalMap(input_size=input_size, output_size=output_size)
 
         # train
         stored_data = stm_training(stm, dataLoader, epochs=epochs)
@@ -174,10 +180,14 @@ if __name__ == "__main__":
     weights = stm.weights.detach()
 
     # plot the learned weights
-    plt.imshow(stm.weights.detach().numpy().reshape(3, 10, 10).transpose(1, 2, 0))
+    plt.imshow(
+        stm.weights.detach().numpy().reshape(3, 10, 10).transpose(1, 2, 0)
+    )
 
     # plot the label targets
-    plt.scatter(*dataset.grid.T[::-1], color=dataset.colors, ec="black", lw=3, s=200)
+    plt.scatter(
+        *dataset.grid.T[::-1], color=dataset.colors, ec="black", lw=3, s=200
+    )
 
     # a generated color
     for x in range(10):

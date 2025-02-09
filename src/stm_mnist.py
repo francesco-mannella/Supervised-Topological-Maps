@@ -1,11 +1,12 @@
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import torchvision
-from torchvision import transforms as T
-import numpy as np
-import matplotlib.pyplot as plt
-from torch.utils.data import DataLoader, Subset
-from stm.topological_maps import TopologicalMap, Updater
 from matplotlib import gridspec
+from torch.utils.data import DataLoader, Subset
+from torchvision import transforms as T
+
+from stm.topological_maps import TopologicalMap, Updater
 
 # matplotlib.use("agg")
 
@@ -14,15 +15,17 @@ def stm_training(model, data_loader, epochs):
     """Train a self-organizing map.
 
     Args:
-        model (TopologicalMap): Instance of the TopologicalMap class to be trained.
-        data_loader (torch.utils.DataLoader): Data loader containing training data.
-        epochs (int): Number of epochs to train the model for.
+        - model (TopologicalMap): Instance of the TopologicalMap class to be
+          trained.
+        - data_loader (torch.utils.DataLoader): Data loader containing training
+          data.
+        - epochs (int): Number of epochs to train the model for.
 
     Returns:
-        loss_modulation_values (list): Learning rates used in each epoch.
-        loss_values (list): Loss values for each epoch.
-        activations_data (list): Activation data obtained during training.
-        weights_data (list): Model weights at each epoch.
+        - loss_modulation_values (list): Learning rates used in each epoch.
+        - loss_values (list): Loss values for each epoch.
+        - activations_data (list): Activation data obtained during training.
+        - weights_data (list): Model weights at each epoch.
     """
 
     # Initialize hyperparameters
@@ -100,7 +103,9 @@ def stm_training(model, data_loader, epochs):
         # Append values to corresponding lists
         loss_modulation_values.append(loss_modulation)
         loss_values.append(running_loss)
-        activations_data.append(np.stack(model.get_representation(outputs, "grid")))
+        activations_data.append(
+            np.stack(model.get_representation(outputs, "grid"))
+        )
         weights_data.append(np.stack(model.weights.tolist()))
 
     # Return output values
