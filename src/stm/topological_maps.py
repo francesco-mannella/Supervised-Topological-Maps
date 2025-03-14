@@ -199,7 +199,7 @@ class TopologicalMap(torch.nn.Module):
         Executes the backward pass for a specified point.
 
         Args:
-            - point (int): Target point for the backward pass.
+            - point (int, int): Target point for the backward pass.
             - neighborhood_std (float, optional): Standard deviation for the
               radial basis function. Defaults to current neighborhood_std.
 
@@ -218,13 +218,13 @@ class TopologicalMap(torch.nn.Module):
         return output
 
 
-class Updater:
+class LossFactory:
     """
-    This class is responsible for updating a SOM or STM model.
+    This class is responsible for building the loss functon for a SOM or STM
+    model.
 
     Parameters:
         - model (torch.nn.Module): The SOM or STM model to update.
-        - learning_rate (float): The optimizer's learning rate.
         - mode (str): Specifies the update type, either 'som' or 'stm'.
         - kernel_function (callable, optional): Defines the kernel
           function.  Defaults to:
@@ -232,11 +232,13 @@ class Updater:
                 - <lambda phi, psi: phi * psi> if mode is 'stm'.
     """
 
-    def __init__(self, model, learning_rate, mode="som", kernel_function=None):
+    def __init__(
+        self,
+        model,
+        mode="som",
+        kernel_function=None,
+    ):
         self.model = model
-        self.optimizer = torch.optim.Adam(
-            params=model.parameters(), lr=learning_rate
-        )
         self.mode = mode
         if kernel_function is None:
             if self.mode == "som":
@@ -288,6 +290,29 @@ class Updater:
             output = 0.5 * norms2 * self.kernel_function(phi, psi)
 
         return output
+
+
+class Updater(LossFactory):
+    """
+    This class is responsible for updating a SOM or STM model.
+
+    Parameters:
+        - model (torch.nn.Module): The SOM or STM model to update.
+        - learning_rate (float): The optimizer's learning rate.
+        - mode (str): Specifies the update type, either 'som' or 'stm'.
+        - kernel_function (callable, optional): Defines the kernel
+          function.  Defaults to:
+                - <lambda phi: phi> if mode is 'som'.
+                - <lambda phi, psi: phi * psi> if mode is 'stm'.
+    """
+
+    def __init__(self, model, learning_rate, mode="som", kernel_function=None):
+
+        super().__init__(model, mode, kernel_function)
+
+        self.optimizer = torch.optim.Adam(
+            params=model.parameters(), lr=learning_rate
+        )
 
     def __call__(
         self,
