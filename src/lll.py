@@ -1,42 +1,15 @@
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
+from torchvision import datasets, transforms
 
-import numpy as np
-
-from stm.topological_maps import TopologicalMap, LossFactory
-
-
-class Efficacies:
-    def __init__(self, shape, radial_sigma, decay):
-        self._efficacies = torch.zeros(shape)
-        self.radial_sigma = radial_sigma
-        self.decay = decay
-
-    def update(self, errors, radial_sigma):
-        error_radial_bases = torch.exp(-0.5 * self.radial_sigma * errors**2)
-        self._efficacies = self.efficacies + self.decay * (
-            error_radial_bases - self._efficacies
-        )
-
-    def get_inefficacies(self):
-
-        return 1 - self._efficacies
+from stm.topological_maps import LossEfficacyFactory, TopologicalMap
 
 
 # Define the tasks
 tasks = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]]
-
-# Define the transformations
-transform = transforms.Compose(
-    [
-        transforms.ToTensor(),
-        transforms.Lambda(lambda x: torch.flatten(x)),
-        transforms.Lambda(lambda x: (x - x.min()) / (x.max() - x.min())),
-    ]
-)
 
 
 # Define hyperparameters
@@ -50,6 +23,8 @@ latent_dim = 100
 anchor_sigma = 2.0
 neigh_sigma_max = 10
 neigh_sigma_base = 0.6
+efficacy_radial_sigma = 2.0
+efficacy_decay = 0.2
 
 anchors = torch.tensor(
     [
@@ -66,6 +41,14 @@ anchors = torch.tensor(
     ]
 ) * np.sqrt(latent_dim)
 
+# Define the transformations
+transform = transforms.Compose(
+    [
+        transforms.ToTensor(),
+        transforms.Lambda(lambda x: torch.flatten(x)),
+        transforms.Lambda(lambda x: (x - x.min()) / (x.max() - x.min())),
+    ]
+)
 # Download the MNIST dataset
 mnist_train = datasets.MNIST(
     root="./data", train=True, download=True, transform=transform
@@ -99,31 +82,29 @@ for task in tasks:
 
 # Initialize the model and optimizer
 model = TopologicalMap(input_dim, latent_dim)
-lossManager = LossFactory(model, "stm")
-efficacies = Efficacies(
-    (batch_size, latent_dim),
-    radial_sigma=radial_sigma,
-    decay=decay,
+lossManager = LossEfficacyFactory(
+    model=model,
+    mode="stm",
+    efficacy_radial_sigma=efficacy_radial_sigma,
+    efficacy_decay=efficacy_decay,
 )
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 criterion = nn.CrossEntropyLoss()
 
 # Train the model on each task sequentially
 for i, task in enumerate(tasks):
-    inefficacies = efficacies.get_inefficacies()
-    neigh_sigmas = neigh_sigma_base + neigh_sigma_max * inefficacies
 
     print(f"Training on task {i+1}: {task}")
     for epoch in range(epochs):
         for batch_idx, (data, target) in enumerate(train_loaders[i]):
             optimizer.zero_grad()
             output = model(data)
-            neigh_sigma = neigh_sigmas[output.argmin(-1)].reshape(-1, 1)
-            loss = lossManager.losses(
+            loss = lossManager.loss(
                 output,
-                neigh_sigma,
-                anchors[target],
-                anchor_sigma,
+                neighborhood_baseline=neigh_sigma_base,
+                neighborhood_max=neigh_sigma_max,
+                anchors=anchors[target],
+                neighborhood_std_anchors=anchor_sigma,
             )
             loss.backward()
             optimizer.step()

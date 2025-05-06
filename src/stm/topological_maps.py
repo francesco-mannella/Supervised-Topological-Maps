@@ -323,7 +323,6 @@ class LossFactory:
 
         return _losses
 
-
 class LossEfficacyFactory(LossFactory):
     def __init__(self, efficacy_radial_sigma, efficacy_decay, *args, **kwargs):
         super(LossEfficacyFactory, self).__init__(*args, **kwargs)
@@ -352,12 +351,15 @@ class LossEfficacyFactory(LossFactory):
             neighborhood_std_anchors,
         )
 
-        _loss = losses * self._inefficacies.reshape(-1, 1)
+        _loss = losses * self._inefficacies.reshape(1, -1)
+
+        # TODO : debug min_norms2 must be a matrix with zeros where not bmu
+        values_norm2, indices_norms2 = norms2.min(-1)
 
         norm_radial_bases = torch.exp(
-            -0.5 * (self.efficacy_radial_sigma**-2) * norms2
+            -0.5 * (self.efficacy_radial_sigma**-2) * min_norms2
         )
-        self._efficacies = self._efficacies + self.decay * (
+        self._efficacies = self._efficacies + self.efficacy_decay * (
             norm_radial_bases - self._efficacies
         )
         self._inefficacies = 1.0 - self._efficacies
