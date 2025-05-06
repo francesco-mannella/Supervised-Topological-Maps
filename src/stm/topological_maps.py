@@ -44,7 +44,6 @@ class RadialBasis(torch.nn.Module):
         self.grid = self.grid.unsqueeze(dim=0).float()
 
     def _apply(self, fn):
-
         """
         Applies a function recursively to all tensors that are sub-modules or
         direct attributes of this module.
@@ -287,7 +286,6 @@ class LossFactory:
         neighborhood_std,
         anchors=None,
         neighborhood_std_anchors=None,
-        external_weights=None
     ):
         """
         Compute the SOM/STM loss.
@@ -301,34 +299,70 @@ class LossFactory:
             - neighborhood_std_anchors (float, optional): The standard
               deviation for anchors  neighborhood modulation. Default is
               neighborhood_std.
-            - external_weights (array-like, optional): External weights
-              multiplying losses
 
         Returns:
             array-like: The values of the computed losses.
         """
 
-        weights = external_weights or torch.ones_like(norms2)
+        self.model.curr_neighborhood_std = neighborhood_std
+        self.model.bmu = self.model.find_bmu(norms2)
 
         # If anchors are not provided, calculate loss without anchors
         if anchors is None:
-            self.model.bmu = self.model.find_bmu(norms2)
             phi = self.model.radial(self.model.bmu, neighborhood_std)
-            self.model.curr_neighborhood_std = neighborhood_std
-            _losses = 0.5 * norms2 * weights * self.kernel_function(phi)
+            _losses = 0.5 * norms2 * self.kernel_function(phi)
         # If anchors are provided, incorporate them into the loss calculation
         else:
             if neighborhood_std_anchors is None:
                 neighborhood_std_anchors = neighborhood_std
-            self.model.curr_neighborhood_std = neighborhood_std
-            self.model.bmu = self.model.find_bmu(norms2)
             phi = self.model.radial(self.model.bmu, neighborhood_std)
             psi = self.model.radial(
                 anchors, neighborhood_std_anchors, as_point=True
             )
-            _losses = 0.5 * norms2 * weights * self.kernel_function(phi, psi)
+            _losses = 0.5 * norms2 * self.kernel_function(phi, psi)
 
         return _losses
+
+
+class LossEfficacyFactory(LossFactory):
+    def __init__(self, efficacy_radial_sigma, efficacy_decay, *args, **kwargs):
+        super(LossEfficacyFactory, self).__init__(*args, **kwargs)
+        self.efficacy_radial_sigma = efficacy_radial_sigma
+        self.efficacy_decay = efficacy_decay
+        self._efficacies = torch.zeros(self.model.output_size)
+        self._inefficacies = 1.0 - torch.zeros(self.model.output_size)
+
+    def loss(
+        self,
+        norms2,
+        neighborhood_baseline,
+        neighborhood_max,
+        anchors=None,
+        neighborhood_std_anchors=None,
+    ):
+
+        _neighborhood_std = neighborhood_baseline + self._inefficacies * (
+            neighborhood_max - neighborhood_baseline
+        )
+
+        losses = self.losses(
+            norms2,
+            _neighborhood_std,
+            anchors,
+            neighborhood_std_anchors,
+        )
+
+        _loss = losses * self._inefficacies.reshape(-1, 1)
+
+        norm_radial_bases = torch.exp(
+            -0.5 * (self.efficacy_radial_sigma**-2) * norms2
+        )
+        self._efficacies = self._efficacies + self.decay * (
+            norm_radial_bases - self._efficacies
+        )
+        self._inefficacies = 1.0 - self._efficacies
+
+        return _loss.mean()
 
 
 class Updater(LossFactory):
