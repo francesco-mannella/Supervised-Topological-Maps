@@ -8,7 +8,7 @@ class DimensionalityError(Exception):
         return "Dimensionality of the output must be 1D or 2D."
 
 
-class RadialBasis:
+class RadialBasis(torch.nn.Module):
     """
     This code creates a radial grid in either 1D or 2D based on a given
     centroid. It can be used to generate a grid of points around a central
@@ -25,6 +25,7 @@ class RadialBasis:
             dims (int): The dimensionality of the grid (1 for 1D, 2 for 2D).
 
         """
+        super(RadialBasis, self).__init__()
         self.dims = dims
         self.size = size
 
@@ -42,7 +43,23 @@ class RadialBasis:
             raise DimensionalityError()
         self.grid = self.grid.unsqueeze(dim=0).float()
 
-    def __call__(self, index, std, as_point=False):
+    def _apply(self, fn):
+
+        """
+        Applies a function recursively to all tensors that are sub-modules or
+        direct attributes of this module.
+
+        This method overrides the `_apply` method of `nn.Module` to ensure that
+        the function `fn` is also applied to the `radial` attribute, which is
+        assumed to be a `nn.Module` as well. This is necessary to propagate
+        changes like moving tensors to a different device
+        (e.g., CPU to GPU) or changing their data type.
+        """
+        super(RadialBasis, self)._apply(fn)
+        self.grid = fn(self.grid)
+        return self
+
+    def forward(self, index, std, as_point=False):
         """
         Args:
             - index (int): Indicates the point at the center of the Gaussian on
@@ -64,7 +81,7 @@ class RadialBasis:
             else:
                 row = index // self.side
                 col = index % self.side
-                x = torch.stack([row, col]).T
+                x = torch.stack([row, col]).T.to(device=self.grid.device)
                 x = x.unsqueeze(dim=1)
             dists = torch.norm(self.grid - x, dim=-1)
 
@@ -123,6 +140,22 @@ class TopologicalMap(torch.nn.Module):
         self.side = (
             None if output_dims == 1 else int(math.sqrt(self.output_size))
         )
+
+    def _apply(self, fn):
+        """
+        Applies a function recursively to all tensors that are sub-modules or
+        direct attributes of this module.
+
+        This method overrides the `_apply` method of `nn.Module` to ensure that
+        the function `fn` is also applied to the `radial` attribute, which is
+        assumed to be a `nn.Module` as well. This is necessary to propagate
+        changes like moving tensors to a different device
+        (e.g., CPU to GPU) or changing their data type.
+        """
+
+        super(TopologicalMap, self)._apply(fn)
+        self.radial = self.radial._apply(fn)
+        return self
 
     def forward(self, x):
         """
@@ -254,6 +287,7 @@ class LossFactory:
         neighborhood_std,
         anchors=None,
         neighborhood_std_anchors=None,
+        external_weights=None
     ):
         """
         Compute the SOM/STM loss.
@@ -267,16 +301,21 @@ class LossFactory:
             - neighborhood_std_anchors (float, optional): The standard
               deviation for anchors  neighborhood modulation. Default is
               neighborhood_std.
+            - external_weights (array-like, optional): External weights
+              multiplying losses
 
         Returns:
-            float: The mean value of the computed loss.
+            array-like: The values of the computed losses.
         """
+
+        weights = external_weights or torch.ones_like(norms2)
+
         # If anchors are not provided, calculate loss without anchors
         if anchors is None:
             self.model.bmu = self.model.find_bmu(norms2)
             phi = self.model.radial(self.model.bmu, neighborhood_std)
             self.model.curr_neighborhood_std = neighborhood_std
-            output = 0.5 * norms2 * self.kernel_function(phi)
+            _losses = 0.5 * norms2 * weights * self.kernel_function(phi)
         # If anchors are provided, incorporate them into the loss calculation
         else:
             if neighborhood_std_anchors is None:
@@ -287,9 +326,9 @@ class LossFactory:
             psi = self.model.radial(
                 anchors, neighborhood_std_anchors, as_point=True
             )
-            output = 0.5 * norms2 * self.kernel_function(phi, psi)
+            _losses = 0.5 * norms2 * weights * self.kernel_function(phi, psi)
 
-        return output
+        return _losses
 
 
 class Updater(LossFactory):
