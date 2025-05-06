@@ -8,23 +8,25 @@ from torchvision import datasets, transforms
 from stm.topological_maps import LossEfficacyFactory, TopologicalMap
 
 
+np.set_printoptions(formatter={"float": "{:4.2f}".format})
+
 # Define the tasks
 tasks = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]]
 
 
 # Define hyperparameters
-learning_rate = 0.001
+learning_rate = 0.01
 batch_size = 64
-epochs = 2
+epochs = 10
 radial_sigma = 1.0
 decay = 0.2
 input_dim = 784
 latent_dim = 100
-anchor_sigma = 2.0
+anchor_sigma = 1
 neigh_sigma_max = 10
 neigh_sigma_base = 0.6
-efficacy_radial_sigma = 2.0
-efficacy_decay = 0.2
+efficacy_radial_sigma = .01
+efficacy_decay = 0.001
 
 anchors = torch.tensor(
     [
@@ -115,8 +117,22 @@ for i, task in enumerate(tasks):
     with torch.no_grad():
         for data, target in test_loaders[i]:
             output = model(data)
-            _, predicted = torch.max(output.data, 1)
+            _, ind = output.min(-1)
+            ind2d = torch.stack(
+                [ind // model.radial.side, ind % model.radial.side]
+            ).T
+            predicted = target[torch.norm(anchors[target] - ind2d).flatten().argmin()]
+
             total += target.size(0)
             correct += (predicted == target).sum().item()
 
     print(f"Accuracy on task {i+1}: {100 * correct / total:.2f}%")
+
+    print("inefficacies")
+    efficacies = (
+        lossManager._inefficacies.reshape(model.radial.side, model.radial.side)
+        .cpu()
+        .detach()
+        .numpy()
+    )
+    print(efficacies)

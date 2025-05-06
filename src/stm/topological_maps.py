@@ -319,7 +319,8 @@ class LossFactory:
             psi = self.model.radial(
                 anchors, neighborhood_std_anchors, as_point=True
             )
-            _losses = 0.5 * norms2 * self.kernel_function(phi, psi)
+            self.kernel = self.kernel_function(phi, psi)
+            _losses = 0.5 * norms2 * self.kernel
 
         return _losses
 
@@ -340,9 +341,10 @@ class LossEfficacyFactory(LossFactory):
         neighborhood_std_anchors=None,
     ):
 
-        _neighborhood_std = neighborhood_baseline + self._inefficacies * (
-            neighborhood_max - neighborhood_baseline
-        )
+        with torch.no_grad():
+            _neighborhood_std = neighborhood_baseline + self._inefficacies * (
+                neighborhood_max - neighborhood_baseline
+            )
 
         losses = self.losses(
             norms2,
@@ -353,16 +355,19 @@ class LossEfficacyFactory(LossFactory):
 
         _loss = losses * self._inefficacies.reshape(1, -1)
 
-        # TODO : debug min_norms2 must be a matrix with zeros where not bmu
-        values_norm2, indices_norms2 = norms2.min(-1)
+        with torch.no_grad():
+            values_norm2, indices_norms2 = (norms2 + (1 - self.kernel)*norms2.max()).min(-1)
+            mask = torch.tile(torch.arange(norms2.shape[1]), (norms2.shape[0], 1))
+            mask = (mask == indices_norms2.reshape(-1, 1)) * values_norm2.reshape(-1, 1)
+            min_norms2 = mask.mean(0)
 
-        norm_radial_bases = torch.exp(
-            -0.5 * (self.efficacy_radial_sigma**-2) * min_norms2
-        )
-        self._efficacies = self._efficacies + self.efficacy_decay * (
-            norm_radial_bases - self._efficacies
-        )
-        self._inefficacies = 1.0 - self._efficacies
+            norm_radial_bases = torch.exp(
+                -0.5 * (self.efficacy_radial_sigma**-2) * min_norms2
+            )
+            self._efficacies = self._efficacies + self.efficacy_decay * (
+                norm_radial_bases - self._efficacies
+            )
+            self._inefficacies = 1.0 - self._efficacies
 
         return _loss.mean()
 
@@ -412,4 +417,3 @@ class Updater(LossFactory):
         self.optimizer.step()
         self.optimizer.zero_grad()
 
-        return loss, unmodulated_loss
