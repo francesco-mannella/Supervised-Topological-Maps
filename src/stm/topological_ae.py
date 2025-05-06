@@ -13,6 +13,112 @@ from torchvision import datasets, transforms
 from stm.topological_maps import LossFactory, TopologicalMap
 
 
+class Encoder(nn.Module):
+    def __init__(self, latent_dimension):
+
+        super(Encoder, self).__init__()
+
+        self.l1 = nn.conv2d(
+            in_channels=1,
+            out_channels=16,
+            kernel_size=3,
+            stride=2,
+            padding=1,
+        )
+        self.l2 = nn.conv2d(
+            in_channels=16,
+            out_channels=32,
+            kernel_size=3,
+            stride=2,
+            padding=1,
+        )
+        self.l3 = nn.linear(
+            in_features=32 * 7 * 7,
+            out_features=latent_dimension,
+        )
+
+    def forward(self, input_tensor):
+        x = self.l1(input_tensor)
+        x = F.relu(x)
+        x = self.l2(x)
+        x = F.relu(x)
+        x = x.view(x.size(0), -1)
+        x = self.l3(x)
+        x = F.relu(x)
+        return x
+
+
+class MoEncoders(nn.Module):
+
+    def __init__(self, latent_dimension, num_encoders):
+
+        super(MoEncoders, self).__init__()
+        self.encoders = [
+            Encoder(latent_dimension) for i in range(num_encoders)
+        ]
+
+    def forward(self, input_tensor, gating):
+
+        gating = F.softmax(gating)
+        x_stack = torch.stack([enc(input_tensor) for enc in self.encoders])
+        x = x_stack * gating.reshape(-1, 1, 1)
+        x = x.mean(dim=0)
+
+        return x
+
+
+class Decoder(nn.Module):
+    def __init__(self, latent_dimension):
+
+        super(Decoder, self).__init__()
+        self.l1 = nn.Linear(
+            in_features=latent_dimension,
+            out_features=32 * 7 * 7,
+        )
+        self.l2 = nn.ConvTranspose2d(
+            in_channels=32,
+            out_channels=16,
+            kernel_size=4,
+            stride=2,
+            padding=1,
+        )
+        self.l3 = nn.ConvTranspose2d(
+            in_channels=16,
+            out_channels=1,
+            kernel_size=4,
+            stride=2,
+            padding=1,
+        )
+
+    def forward(self, latent_variable):
+        z = self.l1(latent_variable)
+        z = F.relu(z)
+        z = z.view(z.size(0), 32, 7, 7)
+        z = self.l2(z)
+        z = F.relu(z)
+        z = torch.sigmoid(self.decoder_deconv2(z))
+        return z
+
+
+class MoDecoders(nn.Module):
+
+    def __init__(self, latent_dimension, num_decoders):
+
+        super(MoDecoders, self).__init__()
+        self.decoders = [
+            Decoder(latent_dimension) for i in range(num_decoders)
+        ]
+
+    def forward(self, latent_variable, gating):
+
+        gating = F.softmax(gating)
+        x_stack = torch.stack([dec(latent_variable) for dec in self.decoders])
+        x = x_stack * gating.reshape(-1, 1, 1)
+        x = x.mean(dim=0)
+
+        return x
+
+
 class TopologicalAE(nn.Module):
     """
     Topological Autoencoder model for unsupervised representation learning.
@@ -23,72 +129,25 @@ class TopologicalAE(nn.Module):
     space.
     """
 
-    def __init__(self, latent_dimension):
+    def __init__(self, latent_dimension, som_dimension):
         """
         Initialize the Topological Autoencoder with specified latent dimension.
 
         Args:
             latent_dimension (int): The dimensionality of the latent space.
+            som_dimension (int): The dimensionality of the topological space.
         """
         super(TopologicalAE, self).__init__()
 
-        # Encoder layers
-        self.encoder_conv1 = nn.Conv2d(
-            in_channels=1, out_channels=16, kernel_size=3, stride=2, padding=1
-        )
-        self.encoder_conv2 = nn.Conv2d(
-            in_channels=16, out_channels=32, kernel_size=3, stride=2, padding=1
-        )
-        self.encoder_fc1 = nn.Linear(in_features=32 * 7 * 7, out_features=256)
+        self.encoder = MoEncoders(latent_dimension, 10)
+        self.decoder = MoDecoders(latent_dimension, 10)
 
         self.topological_map = TopologicalMap(
-            input_size=256, output_size=latent_dimension
+            input_size=latent_dimension,
+            output_size=som_dimension,
         )
 
-        # Decoder layers
-        self.decoder_fc2 = nn.Linear(in_features=256, out_features=32 * 7 * 7)
-        self.decoder_deconv1 = nn.ConvTranspose2d(
-            in_channels=32, out_channels=16, kernel_size=4, stride=2, padding=1
-        )
-        self.decoder_deconv2 = nn.ConvTranspose2d(
-            in_channels=16, out_channels=1, kernel_size=4, stride=2, padding=1
-        )
-
-    def encode(self, input_tensor):
-        """
-        Encodes the input tensor into the latent space.
-
-        Args:
-            - input_tensor (torch.Tensor): The input data to be encoded.
-
-        Returns:
-            - topological_output (torch.Tensor): The normalized code in the
-              latent space.
-        """
-        x = F.relu(self.encoder_conv1(input_tensor))
-        x = F.relu(self.encoder_conv2(x))
-        x = x.view(x.size(0), -1)
-        x = F.relu(self.encoder_fc1(x))
-        topological_output = self.topological_map(x)
-        return x, topological_output
-
-    def decode(self, latent_variable):
-        """
-        Decodes the latent variables back to original data space.
-
-        Args:
-            latent_variable (torch.Tensor): The latent space variables.
-
-        Returns:
-            torch.Tensor: Reconstructed data.
-        """
-        z = F.relu(self.decoder_fc2(latent_variable))
-        z = z.view(z.size(0), 32, 7, 7)
-        z = F.relu(self.decoder_deconv1(z))
-        z = torch.sigmoid(self.decoder_deconv2(z))
-        return z
-
-    def forward(self, input_tensor):
+    def forward(self, input_tensor, ):
         """
         Executes the forward pass for the autoencoder.
 
@@ -99,7 +158,8 @@ class TopologicalAE(nn.Module):
             - (torch.Tensor, torch.Tensor): The reconstructed output and the
               normalized code.
         """
-        latent_variable, topological_output = self.encode(input_tensor)
+        latent_variable = self.encode(input_tensor)
+        topological_output = self.topological_map(latent_variable)
         reconstructed_output = self.decode(latent_variable)
         return reconstructed_output, topological_output
 
@@ -202,7 +262,7 @@ if __name__ == "__main__":
         init="random", n_clusters=10, n_init=10, max_iter=300, random_state=42
     )
     kmeans.fit(data)
-    points = torch.tensor(10 * kmeans.cluster_centers_)
+    points = torch.tensor(10 * kmeans.cluster_centers_).to(device)
 
     # %%
 
@@ -212,4 +272,4 @@ if __name__ == "__main__":
         z = model.topological_map.backward(points)
         generated = model.decode(z.unsqueeze(0))
         plt.subplot(1, 10, i + 1)
-        plt.imshow(generated[0][0].detach().numpy())
+        plt.imshow(generated[0][0].cpu().detach().numpy())
