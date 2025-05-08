@@ -84,6 +84,9 @@ class RadialBasis(torch.nn.Module):
                 x = x.unsqueeze(dim=1)
             dists = torch.norm(self.grid - x, dim=-1)
 
+        if torch.is_tensor(std):
+            std = std.to(self.grid.device)
+
         output = torch.exp(-0.5 * (std**-2) * dists**2)
         output /= output.sum(dim=-1).unsqueeze(dim=-1)
 
@@ -280,8 +283,9 @@ class LossFactory:
         else:
             self.kernel_function = kernel_function
 
-    def losses(
+    def get_weighted_norms(
         self,
+        bmu,
         norms2,
         neighborhood_std,
         anchors=None,
@@ -291,7 +295,8 @@ class LossFactory:
         Compute the SOM/STM loss.
 
         Parameters:
-            - norms2 (array-like): The squared norm of some input data.
+            - bmu (array-like): indices of best matching units.
+            - norms2 (array-like): The squared norms between weights and outputs.
             - neighborhood_std (float): The standard deviation for neighborhood
               radial calculation.
             - anchors (array-like, optional): Labels or anchors for
@@ -305,17 +310,15 @@ class LossFactory:
         """
 
         self.model.curr_neighborhood_std = neighborhood_std
-        self.model.bmu = self.model.find_bmu(norms2)
-
         # If anchors are not provided, calculate loss without anchors
         if anchors is None:
-            phi = self.model.radial(self.model.bmu, neighborhood_std)
+            phi = self.model.radial(bmu, neighborhood_std)
             _losses = 0.5 * norms2 * self.kernel_function(phi)
         # If anchors are provided, incorporate them into the loss calculation
         else:
             if neighborhood_std_anchors is None:
                 neighborhood_std_anchors = neighborhood_std
-            phi = self.model.radial(self.model.bmu, neighborhood_std)
+            phi = self.model.radial(bmu, neighborhood_std)
             psi = self.model.radial(
                 anchors, neighborhood_std_anchors, as_point=True
             )
@@ -323,6 +326,43 @@ class LossFactory:
             _losses = 0.5 * norms2 * self.kernel
 
         return _losses
+
+    def losses(
+        self,
+        norms2,
+        neighborhood_std,
+        anchors=None,
+        neighborhood_std_anchors=None,
+    ):
+        """
+        Compute the SOM/STM loss.
+
+        Parameters:
+            - norms2 (array-like): The squared norms between weights and outputs.
+            - neighborhood_std (float): The standard deviation for neighborhood
+              radial calculation.
+            - anchors (array-like, optional): Labels or anchors for
+              neighborhood modulation. Default is None.
+            - neighborhood_std_anchors (float, optional): The standard
+              deviation for anchors  neighborhood modulation. Default is
+              neighborhood_std.
+
+        Returns:
+            array-like: The values of the computed losses.
+        """
+
+        self.model.bmu = self.model.find_bmu(norms2)
+
+        _losses = self.get_weighted_norms(
+            self.model_bmu,
+            norms2,
+            neighborhood_std,
+            anchors=None,
+            neighborhood_std_anchors=None,
+        )
+
+        return _losses
+
 
 class LossEfficacyFactory(LossFactory):
     def __init__(self, efficacy_radial_sigma, efficacy_decay, *args, **kwargs):
@@ -332,42 +372,88 @@ class LossEfficacyFactory(LossFactory):
         self._efficacies = torch.zeros(self.model.output_size)
         self._inefficacies = 1.0 - torch.zeros(self.model.output_size)
 
+    def to(self, device):
+        self._efficacies = self._efficacies.to(device)
+        self._inefficacies = self._inefficacies.to(device)
+        return self
+
     def loss(
         self,
         norms2,
         neighborhood_baseline,
         neighborhood_max,
+        modulation_baseline,
+        modulation_max,
         anchors=None,
         neighborhood_std_anchors=None,
     ):
 
+        self.model.bmu = self.model.find_bmu(norms2)
+
         with torch.no_grad():
-            _neighborhood_std = neighborhood_baseline + self._inefficacies * (
-                neighborhood_max - neighborhood_baseline
+
+            # The code generates a mask that identifies the Best Matching Unit
+            # (BMU) for each vector of norms within a batch of data.
+            batch_size = len(norms2)
+            mask = torch.zeros_like(norms2)
+            mask[torch.arange(batch_size), self.model.bmu] = 1
+
+            # Compute radial basis functions (RBFs) from squared norms,
+            # centered at zero.
+            norm_radial_bases = (
+                torch.exp(
+                    -0.5 * (self.efficacy_radial_sigma**-2) * norms2
+                )  # Apply RBF formula.
+                * mask  # Apply mask: Only Best Matching Units' (BMU) RBFs are
+                # considered.
             )
 
-        losses = self.losses(
+            # Comiute the mean BMU for each unit
+            mask_props = mask.sum(0)  # BMUs for each unit
+            mask_props[mask_props == 0] = 1e-5  # Avoid division by zero
+            norm_radial_bases = (
+                norm_radial_bases * (mask / mask_props.reshape(1, -1))
+            ).sum(
+                0
+            )  # Normalize and average
+
+            # Update prototype efficacies as leakies of mean RBFs of BMUs.
+            # Update only for units where there are BMUs in that batch
+            mask_radials = norm_radial_bases != 0
+            self._efficacies = (
+                self._efficacies
+                + self.efficacy_decay
+                * (norm_radial_bases - self._efficacies)
+                * mask_radials
+            )
+            self._inefficacies = 1.0 - torch.tanh(3 * self._efficacies)
+
+            # Reshape inefficacies to match batch size.
+            # Each item has one inefficiency value.
+            episode_inefficacies = self._inefficacies.reshape(1, -1) * mask
+            episode_inefficacies = episode_inefficacies.max(-1).values.reshape(
+                -1, 1
+            )
+
+            _neighborhood_std = (
+                neighborhood_baseline
+                + episode_inefficacies
+                * (neighborhood_max - neighborhood_baseline)
+            )
+
+            _modulation_rate = modulation_baseline + episode_inefficacies * (
+                modulation_max - modulation_baseline
+            )
+
+        losses = self.get_weighted_norms(
+            self.model.bmu,
             norms2,
             _neighborhood_std,
             anchors,
             neighborhood_std_anchors,
         )
 
-        _loss = losses * self._inefficacies.reshape(1, -1)
-
-        with torch.no_grad():
-            values_norm2, indices_norms2 = (norms2 + (1 - self.kernel)*norms2.max()).min(-1)
-            mask = torch.tile(torch.arange(norms2.shape[1]), (norms2.shape[0], 1))
-            mask = (mask == indices_norms2.reshape(-1, 1)) * values_norm2.reshape(-1, 1)
-            min_norms2 = mask.mean(0)
-
-            norm_radial_bases = torch.exp(
-                -0.5 * (self.efficacy_radial_sigma**-2) * min_norms2
-            )
-            self._efficacies = self._efficacies + self.efficacy_decay * (
-                norm_radial_bases - self._efficacies
-            )
-            self._inefficacies = 1.0 - self._efficacies
+        _loss = losses * _modulation_rate
 
         return _loss.mean()
 
@@ -416,4 +502,3 @@ class Updater(LossFactory):
         loss.backward(retain_graph=True)
         self.optimizer.step()
         self.optimizer.zero_grad()
-
