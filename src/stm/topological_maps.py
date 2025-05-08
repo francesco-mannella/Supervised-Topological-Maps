@@ -408,7 +408,7 @@ class LossEfficacyFactory(LossFactory):
                 # considered.
             )
 
-            # Comiute the mean BMU for each unit
+            # Compute the mean BMU for each unit
             mask_props = mask.sum(0)  # BMUs for each unit
             mask_props[mask_props == 0] = 1e-5  # Avoid division by zero
             norm_radial_bases = (
