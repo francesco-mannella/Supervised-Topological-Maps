@@ -44,15 +44,17 @@ class RadialBasis(torch.nn.Module):
         self.grid = self.grid.unsqueeze(dim=0).float()
 
     def _apply(self, fn):
-        """
-        Applies a function recursively to all tensors that are sub-modules or
-        direct attributes of this module.
+        """Applies a function recursively to all tensors.
 
-        This method overrides the `_apply` method of `nn.Module` to ensure that
-        the function `fn` is also applied to the `radial` attribute, which is
-        assumed to be a `nn.Module` as well. This is necessary to propagate
-        changes like moving tensors to a different device
-        (e.g., CPU to GPU) or changing their data type.
+        Applies to sub-modules, direct attributes, and the `radial`
+        attribute (assumed to be a `nn.Module`).  This ensures
+        changes like device or data type are propagated correctly.
+
+        Args:
+            fn (function): The function to apply to the tensors.
+
+        Returns:
+            nn.Module: The modified module.
         """
         super(RadialBasis, self)._apply(fn)
         self.grid = fn(self.grid)
@@ -102,18 +104,15 @@ class TopologicalMap(torch.nn.Module):
     def __init__(
         self, input_size, output_size, output_dims=2, parameters=None
     ):
-        """
-        Initializes the TopologicalMap with specified input and output
-        dimensions and optionally custom parameters.
+        """Initializes the TopologicalMap.
 
         Args:
-            - input_size (int): Number of inputs to the network.
-            - output_size (int): Number of outputs from the network.
-            - output_dims (int, optional): Dimensionality of the output space.
-              Defaults to 2.
-            - parameters (numpy.ndarray, optional): Initial weight parameters;
-              defaults to None, which initializes weights with Xavier
-              normalization.
+            input_size (int): Number of inputs.
+            output_size (int): Number of outputs.
+            output_dims (int, optional): Output space dimensions.
+                Defaults to 2.
+            parameters (numpy.ndarray, optional): Initial weights.
+                Defaults to None (Xavier initialization).
         """
 
         super(TopologicalMap, self).__init__()
@@ -144,17 +143,18 @@ class TopologicalMap(torch.nn.Module):
         )
 
     def _apply(self, fn):
-        """
-        Applies a function recursively to all tensors that are sub-modules or
-        direct attributes of this module.
+        """Applies a function recursively to all tensors.
 
-        This method overrides the `_apply` method of `nn.Module` to ensure that
-        the function `fn` is also applied to the `radial` attribute, which is
-        assumed to be a `nn.Module` as well. This is necessary to propagate
-        changes like moving tensors to a different device
-        (e.g., CPU to GPU) or changing their data type.
-        """
+        Applies to sub-modules or direct attributes of this module.
+        Overrides the `_apply` method of `nn.Module`.
+        Applies `fn` to the `radial` attribute (a `nn.Module`).
 
+        Args:
+            fn: The function to apply to the module's tensors.
+
+        Returns:
+            TopologicalMap: self.
+        """
         super(TopologicalMap, self)._apply(fn)
         self.radial = self.radial._apply(fn)
         return self
@@ -194,20 +194,17 @@ class TopologicalMap(torch.nn.Module):
         return torch.argmin(x, dim=-1).detach()
 
     def get_representation(self, x, rtype="point", neighborhood_std=None):
-        """
-        Generates the representation of the Best Matching Unit (BMU) based on
-        the specified type requested.
+        """Generates the representation of the Best Matching Unit (BMU).
 
         Args:
-            - x (torch.Tensor): Input tensor.
-            - rtype (str, optional): Type of the representation. Supported
-              types are 'point' (default) and 'grid'.
-            - neighborhood_std (float, optional): Standard deviation for the
-              neighborhood function. Defaults to current neighborhood_std.
+            x (torch.Tensor): Input tensor.
+            rtype (str, optional): Representation type ('point', 'grid').
+                Defaults to 'point'.
+            neighborhood_std (float, optional): Neighborhood std dev.
+                Defaults to current neighborhood_std.
 
         Returns:
-            torch.Tensor or None: BMU representation based on the specified
-            type; None if BMU is unavailable.
+            torch.Tensor or None: BMU representation; None if unavailable.
         """
 
         self.bmu = self.find_bmu(x)
@@ -271,8 +268,11 @@ class LossFactory:
         mode="som",
         kernel_function=None,
     ):
+        """Initializes LossFactory with model, mode, and kernel function."""
         self.model = model
         self.mode = mode
+
+        # Determine the kernel function based on the mode if not provided.
         if kernel_function is None:
             if self.mode == "som":
                 self.kernel_function = lambda phi: phi
@@ -296,23 +296,25 @@ class LossFactory:
             norms2 (array-like): Squared norms between weights/outputs.
             neighborhood_std (float): Std deviation for neighborhood.
             anchors (array-like, optional): Labels/anchors for modulation.
-                Default is None.
+                Defaults to None.
             neighborhood_std_anchors (float, optional): Std deviation for
-                anchors neighborhood modulation. Default is neighborhood_std.
+                anchors neighborhood modulation. Defaults to neighborhood_std.
 
         Returns:
             array-like: The values of the computed losses.
         """
-
         self.model.curr_neighborhood_std = neighborhood_std
-        # If anchors are not provided, calculate loss without anchors
+
         if anchors is None:
+            # Calculate neighborhood influence using radial basis function.
             phi = self.model.radial(bmu, neighborhood_std)
+            # Compute loss without anchor modulation.
             _losses = 0.5 * norms2 * self.kernel_function(phi)
-        # If anchors are provided, incorporate them into the loss calculation
         else:
+            # Use anchors for neighborhood modulation if provided.
             if neighborhood_std_anchors is None:
                 neighborhood_std_anchors = neighborhood_std
+
             phi = self.model.radial(bmu, neighborhood_std)
             psi = self.model.radial(
                 anchors, neighborhood_std_anchors, as_point=True
@@ -332,34 +334,63 @@ class LossFactory:
         """Compute the SOM/STM loss.
 
         Args:
-            norms2 (array-like): Squared norms between weights and outputs.
+            norms2 (array-like): Squared norms between weights and
+              outputs.
             neighborhood_std (float): Standard deviation for neighborhood
               radial calculation.
-            anchors (array-like, optional): Labels/anchors for neighborhood
-              modulation. Default is None.
-            neighborhood_std_anchors (float, optional): Standard deviation
-              for anchors neighborhood modulation. Defaults to
+            anchors (array-like, optional): Labels/anchors for
+              neighborhood modulation. Default is None.
+            neighborhood_std_anchors (float, optional): Standard
+              deviation for anchors neighborhood modulation. Defaults to
               neighborhood_std.
 
         Returns:
             array-like: Computed loss values.
         """
-
+        # Find best matching unit indices based on norms2.
         self.model.bmu = self.model.find_bmu(norms2)
 
+        # Calculate weighted norms using BMU and other parameters.
         _losses = self.get_weighted_norms(
-            self.model_bmu,
+            self.model.bmu,
             norms2,
             neighborhood_std,
-            anchors=None,
-            neighborhood_std_anchors=None,
+            anchors,
+            neighborhood_std_anchors,
         )
 
         return _losses
 
 
 class LossEfficacyFactory(LossFactory):
+    """
+    A class to manage loss computation with efficacy modulation.
+
+    This class extends LossFactory and incorporates an efficacy mechanism
+    that adjusts the loss based on how effectively each prototype
+    represents the input data. It uses radial basis functions (RBFs)
+    and a decay mechanism to update the efficacies of prototypes over time.
+
+    Attributes:
+        efficacy_radial_sigma (float): Sigma for the radial basis function
+            used to compute efficacy.
+        efficacy_decay (float): Decay rate for updating prototype efficacies.
+        _efficacies (torch.Tensor): Efficacy values for each prototype.
+        _inefficacies (torch.Tensor): Inefficacy values for each prototype.
+    """
+
     def __init__(self, efficacy_radial_sigma, efficacy_decay, *args, **kwargs):
+        """
+        Initializes LossEfficacyFactory with efficacy parameters.
+
+        Args:
+            efficacy_radial_sigma (float): Sigma for the radial basis
+                function.
+            efficacy_decay (float): Decay rate for updating prototype
+                efficacies.
+            *args: Variable length argument list.
+            **kwargs: Arbitrary keyword arguments.
+        """
         super(LossEfficacyFactory, self).__init__(*args, **kwargs)
         self.efficacy_radial_sigma = efficacy_radial_sigma
         self.efficacy_decay = efficacy_decay
@@ -367,6 +398,15 @@ class LossEfficacyFactory(LossFactory):
         self._inefficacies = 1.0 - torch.zeros(self.model.output_size)
 
     def to(self, device):
+        """
+        Moves efficacy tensors to the specified device.
+
+        Args:
+            device (torch.device): The device to move the tensors to.
+
+        Returns:
+            self: The LossEfficacyFactory instance.
+        """
         self._efficacies = self._efficacies.to(device)
         self._inefficacies = self._inefficacies.to(device)
         return self
@@ -381,29 +421,46 @@ class LossEfficacyFactory(LossFactory):
         anchors=None,
         neighborhood_std_anchors=None,
     ):
+        """
+        Computes the efficacy-modulated loss.
 
+        This method calculates the loss by modulating neighborhood and
+        modulation rates based on prototype efficacies.
+
+        Args:
+            norms2 (torch.Tensor): Squared norms of input vectors.
+            neighborhood_baseline (float): Baseline neighborhood std value.
+            neighborhood_max (float): Maximum neighborhood std value.
+            modulation_baseline (float): Baseline modulation rate.
+            modulation_max (float): Maximum modulation rate.
+            anchors (torch.Tensor, optional): Anchors for loss
+                calculation. Defaults to None.
+            neighborhood_std_anchors (torch.Tensor, optional):
+                Neighborhood std for anchors. Defaults to None.
+
+        Returns:
+            torch.Tensor: The mean efficacy-modulated loss.
+        """
+        # Find the Best Matching Unit (BMU) for each input vector
         self.model.bmu = self.model.find_bmu(norms2)
 
         with torch.no_grad():
-
-            # The code generates a mask that identifies the Best Matching Unit
-            # (BMU) for each vector of norms within a batch of data.
+            # Create a mask identifying the BMU for each vector in the batch
             batch_size = len(norms2)
             mask = torch.zeros_like(norms2)
             mask[torch.arange(batch_size), self.model.bmu] = 1
 
             # Compute radial basis functions (RBFs) from squared norms,
-            # centered at zero.
+            # centered at zero. Only BMUs' RBFs are considered.
             norm_radial_bases = (
                 torch.exp(
                     -0.5 * (self.efficacy_radial_sigma**-2) * norms2
                 )  # Apply RBF formula.
-                * mask  # Apply mask: Only Best Matching Units' (BMU) RBFs are
-                # considered.
-            )
+                * mask
+            )  # Mask non-BMU prototypes
 
-            # Compute the mean BMU for each unit
-            mask_props = mask.sum(0)  # BMUs for each unit
+            # Compute the mean RBF activation for each unit based on BMUs.
+            mask_props = mask.sum(0)  # Count BMUs for each unit
             mask_props[mask_props == 0] = 1e-5  # Avoid division by zero
             norm_radial_bases = (
                 norm_radial_bases * (mask / mask_props.reshape(1, -1))
