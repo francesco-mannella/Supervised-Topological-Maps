@@ -7,6 +7,8 @@ from torchvision import datasets, transforms
 
 from stm.topological_maps import LossEfficacyFactory, TopologicalMap
 
+import tqdm
+
 
 # Determine the device to use (GPU if available, otherwise CPU)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -31,6 +33,7 @@ lr_max = 2
 lr_base = 0.001
 efficacy_radial_sigma = 10
 efficacy_decay = 0.005
+efficacy_saturation_factor = 2.5
 
 anchors = torch.tensor(
     [
@@ -94,6 +97,7 @@ lossManager = LossEfficacyFactory(
     mode="stm",
     efficacy_radial_sigma=efficacy_radial_sigma,
     efficacy_decay=efficacy_decay,
+    efficacy_saturation_factor=efficacy_saturation_factor,
 ).to(device)
 
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
@@ -116,7 +120,7 @@ plt.pause(0.1)
 for i, task in enumerate(tasks):
 
     print(f"Training on task {i+1}: {task}")
-    for epoch in range(epochs):
+    for epoch in tqdm.tqdm(range(epochs)):
         for batch_idx, (data, target) in enumerate(train_loaders[i]):
             # Move data and target to the device
             data, target = data.to(device), target.to(device)

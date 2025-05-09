@@ -1,5 +1,6 @@
 import math
 
+import kmeans_pytorch
 import torch
 
 
@@ -249,6 +250,62 @@ class TopologicalMap(torch.nn.Module):
         output = torch.matmul(hov_phi, self.weights.T)
         return output
 
+    def get_anchor_groups(self, anchors):
+        """Assigns each weight vector to an anchor group using k-means.
+
+        Args:
+            anchors (torch.Tensor): Anchor points tensor.
+
+        Returns:
+            torch.Tensor: Anchor group assignments for each weight vector.
+        """
+
+        cluster_ids, cluster_centers = kmeans_pytorch.kmeans(
+            X=self.model.weights.T,
+            num_clusters=len(anchors),
+            distance="euclidean",
+            device=self.model.device,
+        )
+
+        side_length = self.model.radial.side
+        side_indices = torch.arange(side_length)
+        # Stack the indices and cluster IDs
+        coordinate_cluster_ids = torch.stack(
+            [
+                *[
+                    X.flatten()
+                    for X in torch.meshgrid(side_indices, side_indices)
+                ],
+                cluster_ids,
+            ]
+        ).T
+
+        # Calculate the mean coordinate for each cluster
+        cluster_means = torch.stack(
+            [
+                coordinate_cluster_ids[coordinate_cluster_ids[:, 2] == x]
+                .float()
+                .mean(0)
+                for x in range(len(anchors))
+            ]
+        )
+
+        # Assign each cluster to the nearest anchor
+        cluster_to_anchor = (
+            torch.norm(
+                anchors.cpu().reshape(-1, 1, 2)
+                - cluster_means[:, :2].reshape(1, -1, 2),
+                dim=-1,
+            )
+            .min(0)
+            .indices
+        )
+
+        # Assign each weight vector to the anchor group of its cluster
+        anchor_groups = cluster_to_anchor[coordinate_cluster_ids[:, 2]]
+
+        return anchor_groups
+
 
 class LossFactory:
     """Builds the loss function for a SOM or STM model.
@@ -379,7 +436,14 @@ class LossEfficacyFactory(LossFactory):
         _inefficacies (torch.Tensor): Inefficacy values for each prototype.
     """
 
-    def __init__(self, efficacy_radial_sigma, efficacy_decay, *args, **kwargs):
+    def __init__(
+        self,
+        efficacy_radial_sigma,
+        efficacy_decay,
+        efficacy_saturation_factor,
+        *args,
+        **kwargs,
+    ):
         """
         Initializes LossEfficacyFactory with efficacy parameters.
 
@@ -394,6 +458,7 @@ class LossEfficacyFactory(LossFactory):
         super(LossEfficacyFactory, self).__init__(*args, **kwargs)
         self.efficacy_radial_sigma = efficacy_radial_sigma
         self.efficacy_decay = efficacy_decay
+        self.efficacy_saturation_factor = efficacy_saturation_factor
         self._efficacies = torch.zeros(self.model.output_size)
         self._inefficacies = 1.0 - torch.zeros(self.model.output_size)
 
@@ -460,7 +525,7 @@ class LossEfficacyFactory(LossFactory):
             )  # Mask non-BMU prototypes
 
             # Compute the mean RBF activation for each unit based on BMUs.
-            mask_props = mask.sum(0)  # Count BMUs for each unit
+            mask_props = (mask > 0).sum(0).float()  # Count BMUs for each unit
             mask_props[mask_props == 0] = 1e-5  # Avoid division by zero
             norm_radial_bases = (
                 norm_radial_bases * (mask / mask_props.reshape(1, -1))
@@ -477,14 +542,17 @@ class LossEfficacyFactory(LossFactory):
                 * (norm_radial_bases - self._efficacies)
                 * mask_radials
             )
-            self._inefficacies = 1.0 - torch.tanh(3 * self._efficacies)
+
+            # use tanh to saturate inefficacies
+            self._inefficacies = 1.0 - torch.tanh(
+                self.efficacy_saturation_factor * self._efficacies
+            )
 
             # Reshape inefficacies to match batch size.
             # Each item has one inefficiency value.
-            episode_inefficacies = self._inefficacies.reshape(1, -1) * mask
-            episode_inefficacies = episode_inefficacies.max(-1).values.reshape(
-                -1, 1
-            )
+            episode_inefficacies = (
+                mask @ self._inefficacies.flatten()
+            ).reshape(-1, 1)
 
             _neighborhood_std = (
                 neighborhood_baseline
