@@ -230,16 +230,16 @@ class TopologicalMap(torch.nn.Module):
             return None
 
     def backward(self, point, neighborhood_std=None):
-        """
-        Executes the backward pass for a specified point.
+        """Executes the backward pass for a specified point.
 
         Args:
-            - point (int, int): Target point for the backward pass.
-            - neighborhood_std (float, optional): Standard deviation for the
-              radial basis function. Defaults to current neighborhood_std.
+            point (int, int): Target point for the backward pass.
+            neighborhood_std (float, optional): Standard deviation for
+                the radial basis function.
+                Defaults to current neighborhood_std.
 
         Returns:
-            torch.Tensor: Result of the backward pass for the specified point.
+            torch.Tensor: Result of the backward pass for the point.
         """
 
         if neighborhood_std is None:
@@ -254,17 +254,15 @@ class TopologicalMap(torch.nn.Module):
 
 
 class LossFactory:
-    """
-    This class is responsible for building the loss functon for a SOM or STM
-    model.
+    """Builds the loss function for a SOM or STM model.
 
-    Parameters:
-        - model (torch.nn.Module): The SOM or STM model to update.
-        - mode (str): Specifies the update type, either 'som' or 'stm'.
-        - kernel_function (callable, optional): Defines the kernel
-          function.  Defaults to:
-                - <lambda phi: phi> if mode is 'som'.
-                - <lambda phi, psi: phi * psi> if mode is 'stm'.
+    Args:
+        model (torch.nn.Module): The SOM or STM model to update.
+        mode (str): Specifies the update type ('som' or 'stm').
+        kernel_function (callable, optional): Kernel function.
+          Defaults to:
+            - ``lambda phi: phi`` if mode is 'som'.
+            - ``lambda phi, psi: phi * psi`` if mode is 'stm'.
     """
 
     def __init__(
@@ -291,19 +289,16 @@ class LossFactory:
         anchors=None,
         neighborhood_std_anchors=None,
     ):
-        """
-        Compute the SOM/STM loss.
+        """Compute the SOM/STM loss.
 
-        Parameters:
-            - bmu (array-like): indices of best matching units.
-            - norms2 (array-like): The squared norms between weights and outputs.
-            - neighborhood_std (float): The standard deviation for neighborhood
-              radial calculation.
-            - anchors (array-like, optional): Labels or anchors for
-              neighborhood modulation. Default is None.
-            - neighborhood_std_anchors (float, optional): The standard
-              deviation for anchors  neighborhood modulation. Default is
-              neighborhood_std.
+        Args:
+            bmu (array-like): Indices of best matching units.
+            norms2 (array-like): Squared norms between weights/outputs.
+            neighborhood_std (float): Std deviation for neighborhood.
+            anchors (array-like, optional): Labels/anchors for modulation.
+                Default is None.
+            neighborhood_std_anchors (float, optional): Std deviation for
+                anchors neighborhood modulation. Default is neighborhood_std.
 
         Returns:
             array-like: The values of the computed losses.
@@ -334,21 +329,20 @@ class LossFactory:
         anchors=None,
         neighborhood_std_anchors=None,
     ):
-        """
-        Compute the SOM/STM loss.
+        """Compute the SOM/STM loss.
 
-        Parameters:
-            - norms2 (array-like): The squared norms between weights and outputs.
-            - neighborhood_std (float): The standard deviation for neighborhood
+        Args:
+            norms2 (array-like): Squared norms between weights and outputs.
+            neighborhood_std (float): Standard deviation for neighborhood
               radial calculation.
-            - anchors (array-like, optional): Labels or anchors for
-              neighborhood modulation. Default is None.
-            - neighborhood_std_anchors (float, optional): The standard
-              deviation for anchors  neighborhood modulation. Default is
+            anchors (array-like, optional): Labels/anchors for neighborhood
+              modulation. Default is None.
+            neighborhood_std_anchors (float, optional): Standard deviation
+              for anchors neighborhood modulation. Defaults to
               neighborhood_std.
 
         Returns:
-            array-like: The values of the computed losses.
+            array-like: Computed loss values.
         """
 
         self.model.bmu = self.model.find_bmu(norms2)
@@ -459,17 +453,16 @@ class LossEfficacyFactory(LossFactory):
 
 
 class Updater(LossFactory):
-    """
-    This class is responsible for updating a SOM or STM model.
+    """Update SOM or STM model.
 
-    Parameters:
-        - model (torch.nn.Module): The SOM or STM model to update.
-        - learning_rate (float): The optimizer's learning rate.
-        - mode (str): Specifies the update type, either 'som' or 'stm'.
-        - kernel_function (callable, optional): Defines the kernel
-          function.  Defaults to:
-                - <lambda phi: phi> if mode is 'som'.
-                - <lambda phi, psi: phi * psi> if mode is 'stm'.
+    Args:
+        model (torch.nn.Module): SOM or STM model to update.
+        learning_rate (float): Optimizer learning rate.
+        mode (str): Update type, 'som' or 'stm'.
+        kernel_function (callable, optional): Kernel function.
+          Defaults to:
+            - ``lambda phi: phi`` if mode is 'som'.
+            - ``lambda phi, psi: phi * psi`` if mode is 'stm'.
     """
 
     def __init__(self, model, learning_rate, mode="som", kernel_function=None):
@@ -498,7 +491,9 @@ class Updater(LossFactory):
             raise ValueError("Invalid mode. Use 'som' or 'stm'.")
 
         loss = (learning_modulation * losses).mean()
-        unmodulated_loss = losses.mean()
+        modulated_loss = losses.mean()
         loss.backward(retain_graph=True)
         self.optimizer.step()
         self.optimizer.zero_grad()
+
+        return loss, modulated_loss
