@@ -250,6 +250,24 @@ class TopologicalMap(torch.nn.Module):
         output = torch.matmul(hov_phi, self.weights.T)
         return output
 
+    def get_weights(self, mode="np"):
+        """Returns the weights of the model.
+
+        Args:
+            mode (str, optional): Specifies the format of the returned
+              weights. It can be 'np' for numpy array or 'torch' for
+              torch tensor. Defaults to "np".
+
+        Returns:
+            np.ndarray: The weights of the model as a numpy array.
+        """
+        # Extract weights from the model and detach from the computation graph
+        w = self.weights.detach()
+        if mode == "np":
+            return w.cpu().numpy()
+        elif mode == "torch":
+            return w
+
     def get_anchor_groups(self, anchors):
         """Assigns each weight vector to an anchor group using k-means.
 
@@ -475,6 +493,9 @@ class LossEfficacyFactory(LossFactory):
         self._efficacies = self._efficacies.to(device)
         self._inefficacies = self._inefficacies.to(device)
         return self
+
+    def get_efficacies(self):
+        return self._efficacies.cpu().detach().numpy()
 
     def loss(
         self,
